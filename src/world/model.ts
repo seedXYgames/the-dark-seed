@@ -16,7 +16,7 @@ export const MASK_N = (WORLD_HALF * 2) / MASK_STEP + 1; // 701
 const HASH = 16;
 export const PLAYER_RADIUS = 0.35;
 
-function toLocal(px: number, pz: number, cx: number, cz: number, rot: number): [number, number] {
+export function toLocal(px: number, pz: number, cx: number, cz: number, rot: number): [number, number] {
   const dx = px - cx, dz = pz - cz;
   const c = Math.cos(rot), s = Math.sin(rot);
   // inverso di world = c + lx*(cos,-sin) + lz*(sin,cos)

@@ -1,0 +1,10 @@
+[   16481ms] [LOG] BJS - [23:22:04]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[   16499ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:1
+[   17747ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:1
+[   83318ms] [LOG] BJS - [23:23:11]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[  105188ms] [LOG] BJS - [23:23:33]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[  106188ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:1
+[  146802ms] [LOG] BJS - [23:24:14]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[  167595ms] [LOG] BJS - [23:24:35]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[  168818ms] [LOG] BJS - [23:24:36]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[  169993ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/favicon.ico:1

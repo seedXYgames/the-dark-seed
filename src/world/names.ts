@@ -54,6 +54,13 @@ export function poiName(type: PoiType, rng: Rng, used: Set<string>): L10n {
   return { it: `${n[0]} ${k}`, en: `${n[1]} ${k}` };
 }
 
+/** Il protagonista è un uomo: nomi maschili per l'agente (anche la voce del narratore è maschile). */
+export const OFFICER_FIRST_NAMES = ['Dale', 'Wes', 'Calvin', 'Marcus', 'Roy', 'Glenn', 'Amos', 'Hank', 'Owen', 'Frank', 'Silas', 'Walt', 'Abel', 'Curtis', 'Miles', 'Russ', 'Emmett', 'Boyd', 'Clyde', 'Dean'];
+
+export function officerName(rng: Rng): { first: string; last: string } {
+  return { first: rng.pick(OFFICER_FIRST_NAMES), last: rng.pick(LAST_NAMES) };
+}
+
 export function personName(rng: Rng): { first: string; last: string } {
   return { first: rng.pick(FIRST_NAMES), last: rng.pick(LAST_NAMES) };
 }

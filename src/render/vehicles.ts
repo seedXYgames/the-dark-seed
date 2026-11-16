@@ -3,10 +3,11 @@ import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import type { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Geo, type Ctx, type V3, makeCanvasTexture, texPlane, segsFor } from './meshUtil';
+import { buildPatrolCar, buildPatrolTrunk } from './patrolCar';
 
 export const CAR_COLORS = [0x6e2a25, 0x2f4a3a, 0x8b8f8a, 0x2a3a52, 0xb9ad8f, 0x3a3a3c];
 export interface CarOpts { body: string; color: number; fogged: boolean; police: boolean; plate: string; unit: string }
-export interface CarBuilt { meshes: Mesh[]; head: Mesh; amber?: Mesh; own: StandardMaterial[] }
+export interface CarBuilt { meshes: Mesh[]; head: Mesh; amber?: Mesh; beacons?: { red: Mesh; blue: Mesh }; own: StandardMaterial[] }
 
 function texMat(c: Ctx, name: string, w: number, h: number, draw: (x: CanvasRenderingContext2D, w: number, h: number) => void): StandardMaterial {
   const m = c.mats.make(name, 0xffffff);
@@ -15,6 +16,7 @@ function texMat(c: Ctx, name: string, w: number, h: number, draw: (x: CanvasRend
 }
 
 export function buildCar(c: Ctx, parent: TransformNode, o: CarOpts): CarBuilt {
+  if (o.police) return buildPatrolCar(c, parent, o);
   const g = new Geo(o.plate.length * 13 + o.color), gh = new Geo(1), ga = new Geo(1);
   gh.jit = 0; ga.jit = 0; g.jit = 0.03;
   const col = o.police ? 0x15181d : CAR_COLORS[o.color % 6], glass = o.fogged ? 0x9aa3a6 : 0x1b2428, dk = 0x101010;
@@ -109,9 +111,5 @@ export function buildCar(c: Ctx, parent: TransformNode, o: CarOpts): CarBuilt {
 
 /** Cofano del bagagliaio dell'auto di pattuglia, nel sistema dell'oggetto `car_trunk` (cerniera in z=+1.25, y=+0.2). */
 export function buildTrunkLid(c: Ctx, hinge: TransformNode): Mesh {
-  const g = new Geo(4);
-  g.jit = 0.03;
-  const a: V3 = [0, 0, 0];
-  g.box(a[0], 0.02, -0.44, 1.7, 0.05, 0.9, 0x15181d).box(0, -0.02, -0.44, 1.5, 0.03, 0.78, 0x0d0e10).box(0, 0.0, -0.9, 0.3, 0.03, 0.03, 0x9a9a9a);
-  return g.build('trunk.lid', c.scene, c.mats.vc, hinge);
+  return buildPatrolTrunk(c, hinge);
 }

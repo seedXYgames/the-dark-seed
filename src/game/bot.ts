@@ -71,7 +71,7 @@ export class Bot {
     const st = s.state;
     const carPoi = s.spec.pois[0].id;
     const car = s.objects({ kind: 'police_car' })[0];
-    const fail = (reason: string): BotResult => ({ ok: false, reason, time: st.time, walked: this.walked, steps: this.steps });
+    const fail = (reason: string): BotResult => ({ ok: false, reason: st.death ? `killed by ${st.death.kind}` : reason, time: st.time, walked: this.walked, steps: this.steps });
     if (this.opts.torch) s.toggleTorch();
     // prima di finire, l'auto non deve chiudere il turno
     if (s.canReach(car.id)) { s.interact(car.id); if (st.ended) return fail('ended early'); }

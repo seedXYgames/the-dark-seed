@@ -2,6 +2,34 @@
 
 Aggiornato al 16 novembre 2026. Prove e comandi: `docs/QA_REPORT.md`. Requisito per requisito: `docs/ACCEPTANCE_MATRIX.md`.
 
+## Ultimi aggiornamenti autorizzati dall'autore
+
+- Omino osservatore persistente: cappotto e cappello, resta a distanza, immobile quando guardato,
+  può riposizionarsi solo fuori campo; non attacca e può restare fino a fine turno. Stream indipendente
+  dagli incontri già esistenti. Seed di prova: 0, osservazione dopo circa 63 s.
+- Colonna sonora misteriosa procedurale con accordi sospesi, pedale grave e note rade. Attivazione
+  e dissolvenza condivise con un indicatore lampeggiante in alto a destra, IT/EN. Copre osservatore,
+  incontri visibili/udibili, anomalie, illusioni, eventi estremi, luci non identificate, SMS misteriosi,
+  indizi ispezionati e mutamenti notati; non segnala eventi nascosti lontani.
+- Aggiornamento osservatore: 160 test totali, build e audit statico; indicatore e modello verificati
+  nel browser. La musica è verificata come sintesi e collegamento al gioco, non ascoltata.
+
+- Torcia con metà raggio alla stessa distanza, centro più luminoso e bordo sfumato conservato.
+- Animali quasi neri di notte: colori del mantello recuperati nel fascio; occhi non autoilluminanti.
+- Nuovi incontri seeded: Bigfoot, alieni verdi o grigi (2–5) presso UFO precipitato o tende,
+  setta immaginaria (2–5) attorno a un rito. Modelli e suoni procedurali.
+- Percezione basata su vista, direzione, terreno/edifici, nebbia, rumore, corsa e luce. Inseguimento
+  sull'ultima posizione percepita, ricerca e ritorno al luogo; niente conoscenza continua del giocatore.
+- **Nuova regola approvata dall'autore: Bigfoot e setta possono uccidere.** Questo sostituisce il precedente
+  vincolo di assenza di morte. Schermata dedicata e possibilità di riprovare lo stesso seed. Gli alieni
+  restano innocui e fuggono dopo 120–210 secondi dal loro primo inseguimento, sparendo fuori vista.
+- Intro riscritta IT/EN, M apre la mappa, WASD funziona anche con telefono aperto (visuale ferma mentre
+  si usa il cursore). Fari della volante accesi a inizio turno per tutti i seed.
+- Verificati su questo aggiornamento: 150 test, build, audit statico, browser e 40 turni del bot
+  (39 completati, una morte da setta, nessun errore di navigazione). Vedi il nuovo paragrafo del rapporto QA.
+
+Le sezioni seguenti descrivono la precedente consegna: in caso di differenze valgono gli aggiornamenti sopra.
+
 ## Implementato e verificato
 
 - Menu con due voci su sfondo forestale, impostazioni (lingua IT/EN e grafica) persistenti, intro nera con

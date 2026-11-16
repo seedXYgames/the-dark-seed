@@ -280,6 +280,19 @@ function call(c: Ctx, out: AudioNode, t: number, p: RecipeParams, o: { f: number
 // ---------------------------------------------------------------- ricette one-shot
 
 export const RECIPES: Record<SoundKind, Recipe> = {
+  alien_call(c, out, t, p) {
+    const n = p.rng.int(2, 4);
+    for (let i = 0; i < n; i++) call(c, out, t + i * 0.32, p, { f: 370 + p.rng.next() * 160, fMid: 1100, f2: 180, dur: 0.27, peak: 0.45, formant: 1900, q: 5, rasp: 33, breath: 0.12 });
+    return n * 0.32 + 0.15;
+  },
+  bigfoot_growl(c, out, t, p) {
+    call(c, out, t, p, { f: 78, fMid: 115, f2: 48, dur: 1.8, peak: 0.65, formant: 280, q: 2, rasp: 26, breath: 0.4 });
+    return 2;
+  },
+  cult_chant(c, out, t, p) {
+    for (let i = 0; i < 3; i++) call(c, out, t + i * 0.18, p, { f: 95 + i * 14, fMid: 110 + i * 12, f2: 88 + i * 10, dur: 2.7, peak: 0.18, formant: 660, q: 2, rasp: 8, breath: 0.15 });
+    return 3.3;
+  },
   door_open(c, out, t, p) {
     clickAt(c, out, t, p, 1800, 0.5, 240);
     creak(c, out, t + 0.05, p, 0.85 + p.rng.next() * 0.3, 0.5, 38, 64, 820);
@@ -417,6 +430,30 @@ export const RECIPES: Record<SoundKind, Recipe> = {
       const f = 400 + p.rng.next() * 90;
       call(c, out, t + at, p, { f, fMid: f * 1.12, f2: f * 0.8, dur, peak: 0.45 + p.rng.next() * 0.25, formant: 1350 + p.rng.next() * 300, q: 2.2, rasp: 75, breath: 0.12 });
       at += dur + 0.06 + p.rng.next() * 0.3;
+    }
+    return at;
+  },
+  screech(c, out, t, p) {
+    // strido lungo e rauco (barbagianni): rumore stretto che sale, con raspa
+    const dur = 0.9 + p.rng.next() * 0.7;
+    call(c, out, t, p, { f: 1500, fMid: 2100 + p.rng.next() * 300, f2: 1700, dur, peak: 0.42, formant: 2600, q: 1.6, rasp: 95, breath: 0.5 });
+    nz(c, out, t, p, { dur, peak: 0.16, attack: dur * 0.2, hold: dur * 0.4, type: 'bandpass', f: 3000 * p.pitch, f2: 3900 * p.pitch, q: 2.5 });
+    return dur + 0.05;
+  },
+  nightbird(c, out, t, p) {
+    // richiamo che non si riconosce: fischi discendenti con tremolo, a volte chiusi da un trillo secco
+    const lp = bq(c, 'lowpass', 2600, 0.7, out);
+    const n = 2 + p.rng.int(0, 2), base = (760 + p.rng.next() * 240) * p.pitch;
+    let at = 0;
+    for (let i = 0; i < n; i++) {
+      const dur = 0.42 + p.rng.next() * 0.3, f = base * (1 - i * 0.07);
+      tn(c, lp, t + at, { type: 'sine', f: f * 1.22, f2: f * 0.72, dur, peak: 0.5, attack: dur * 0.12, hold: dur * 0.25, vibRate: 17 + p.rng.next() * 6, vibDepth: 28 });
+      tn(c, lp, t + at, { type: 'triangle', f: f * 2.44, f2: f * 1.44, dur: dur * 0.8, peak: 0.07, attack: dur * 0.12 });
+      at += dur + 0.14 + p.rng.next() * 0.35;
+    }
+    if (p.rng.next() < 0.45) {
+      for (let k = 0; k < 7; k++) tn(c, lp, t + at + k * 0.055, { type: 'triangle', f: base * 0.55, f2: base * 0.5, dur: 0.04, peak: 0.3, attack: 0.004 });
+      at += 0.42;
     }
     return at;
   },
@@ -841,6 +878,24 @@ function isParam(x: AudioNode | AudioParam): x is AudioParam {
 export type LoopBuilder = (c: Ctx, out: AudioNode, p: RecipeParams) => LoopHandle;
 
 export const LOOPS: Record<LoopKind, LoopBuilder> = {
+  mystery_music(c, out, p) {
+    const s = new Sources();
+    // Pedale grave, accordo minore sospeso e note di vetro rade; traccia non spaziale.
+    const pad = bq(c, 'lowpass', 1500, 0.6, out);
+    for (const [i, f] of [55, 110, 130.813, 155.563, 220.3].entries()) {
+      const g = gn(c, i === 0 ? 0.2 : 0.055, pad);
+      const o = s.osc(c, i < 2 ? 'sine' : 'triangle', f, g);
+      s.lfo(c, 0.045 + i * 0.013, 0.018, g.gain);
+      s.lfo(c, 0.08 + i * 0.019, f * 0.003, o.frequency);
+    }
+    let next = c.currentTime + 0.2, note = 0;
+    const notes = [440, 523.251, 622.254, 466.164, 523.251, 415.305];
+    return { stop: t => s.stop(t), tick(t) {
+      if (t < next) return;
+      next = t + 2.8 + p.rng.next() * 2.5;
+      tn(c, out, t + 0.02, { f: notes[note++ % notes.length], dur: 2.6, peak: 0.07, attack: 0.08, vibRate: 3.7, vibDepth: 0.8 });
+    } };
+  },
   generator(c, out, p) {
     const s = new Sources();
     const chug = gn(c, 0.6, out);

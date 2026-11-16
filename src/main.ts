@@ -11,7 +11,7 @@ import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { AudioEngine } from './audio/engine';
 import { SilencePlanner, computeSoundscape } from './audio/soundscape';
 import { Tts } from './audio/tts';
-import type { ExtremeRenderState, UiCallbacks } from './core/api';
+import type { ExtremeRenderState, PhoneTab, UiCallbacks } from './core/api';
 import type { Settings } from './core/contracts';
 import { clamp } from './core/rng';
 import { EYE_HEIGHT, GameSession, type PlayerInput } from './game/session';
@@ -44,6 +44,8 @@ let lastPhoneUpdate = 0;
 let focus: { id?: string; actorId?: string } = {};
 let inspect: { mesh: TransformNode; light: PointLight; rx: number; ry: number; dist: number } | null = null;
 let pendingPhoto = false;
+const BASE_FOV = 1.15, ZOOM_FOV = 0.42;
+let zooming = false;
 let wantLock = false;
 let frame = 0;
 let devTimeScale = 1;
@@ -59,7 +61,7 @@ function buildView(seed: number, playable: boolean): View {
   scene.skipPointerMovePicking = true;
   scene.ambientColor = new Color3(0, 0, 0);
   const camera = new UniversalCamera('cam', new Vector3(0, 2, 0), scene);
-  camera.minZ = 0.1; camera.maxZ = 4000; camera.fov = 1.15;
+  camera.minZ = 0.1; camera.maxZ = 4000; camera.fov = BASE_FOV;
   camera.inputs.clear();
   scene.activeCamera = camera;
   const session = new GameSession({ seed, lang: settings.lang, simFactory: playable ? createSimulation : undefined, postProcess: seedMysteries });
@@ -115,7 +117,7 @@ function startGame(seed: number) {
       mode = 'game';
       ui.setPauseInfo(seed);
       ui.show('game');
-      ui.setHints(['hint.move', 'hint.run', 'hint.interact', 'hint.torch', 'hint.phone', 'hint.photo', 'hint.pause'].map((k) => t(L(), k)));
+      ui.setHints(['hint.move', 'hint.run', 'hint.interact', 'hint.zoom', 'hint.torch', 'hint.phone', 'hint.map', 'hint.photo', 'hint.pause'].map((k) => t(L(), k)));
       ui.setTorch(view.session.state.torch.charge, false, 0);
       lockPointer();
       if (import.meta.env.DEV) exposeDev();
@@ -127,7 +129,7 @@ function lockPointer() {
   wantLock = true;
   try { const r = canvas.requestPointerLock() as unknown; if (r && typeof (r as Promise<void>).catch === 'function') (r as Promise<void>).catch(() => {}); } catch { /* serve un gesto dell'utente */ }
 }
-function unlockPointer() { wantLock = false; if (document.pointerLockElement) document.exitPointerLock(); }
+function unlockPointer() { wantLock = false; zooming = false; if (document.pointerLockElement) document.exitPointerLock(); }
 
 const callbacks: UiCallbacks = {
   onStartGame: (seed) => startGame(seed),
@@ -139,6 +141,8 @@ const callbacks: UiCallbacks = {
   onResume: () => { paused = false; ui.show('game'); lockPointer(); void audio.resume(); },
   onAbandon: () => { view?.session.abandon(); tts.cancel(); showMenu(); },
   onBackToMenu: () => showMenu(),
+  onExit: () => { audio.suspend(); tts.cancel(); },
+  onExitCancelled: () => { void audio.resume(); },
   onPhoneClosed: () => { if (mode === 'game' && !paused) lockPointer(); },
   onTakePhoto: () => { pendingPhoto = true; },
   onMessageRead: (id) => view?.session.markRead(id),
@@ -158,10 +162,10 @@ function refreshPhone(force = false) {
   if (ui.isPhoneOpen()) ui.updatePhone(view.session.phoneView());
 }
 
-function openPhone() {
+function openPhone(tab?: PhoneTab) {
   if (!view || inspect) return;
   unlockPointer();
-  ui.openPhone();
+  ui.openPhone(tab);
   refreshPhone(true);
 }
 
@@ -215,23 +219,29 @@ window.addEventListener('keydown', (e) => {
     case 'KeyE': doInteract(); break;
     case 'KeyF': if (!inspect) view.session.toggleTorch(); break;
     case 'KeyT': openPhone(); break;
+    case 'KeyM': openPhone('map'); break;
     case 'KeyC': if (!inspect) pendingPhoto = true; break;
     default: break;
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('blur', () => { keys.clear(); zooming = false; });
 canvas.addEventListener('mousedown', (e) => {
   if (mode !== 'game' || paused || ui.isPhoneOpen()) return;
   void audio.resume();
   if (document.pointerLockElement !== canvas) { lockPointer(); return; }
   if (e.button === 0) doInteract();
+  if (e.button === 2 && !inspect) zooming = true;
 });
+// tasto destro: zoom per guardare lontano (come stringere gli occhi o un binocolo tascabile)
+window.addEventListener('mouseup', (e) => { if (e.button === 2) zooming = false; });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('mousemove', (e) => {
   if (mode !== 'game' || document.pointerLockElement !== canvas) return;
   if (inspect) { inspect.rx += e.movementX * 0.008; inspect.ry = clamp(inspect.ry + e.movementY * 0.008, -1.5, 1.5); return; }
-  yaw += e.movementX * 0.0022;
-  pitch = clamp(pitch + e.movementY * 0.0022, -1.45, 1.45);
+  const sens = 0.0022 * (view ? view.camera.fov / BASE_FOV : 1); // più lento quando si zooma
+  yaw += e.movementX * sens;
+  pitch = clamp(pitch + e.movementY * sens, -1.45, 1.45);
 });
 canvas.addEventListener('wheel', (e) => { if (inspect) { inspect.dist = clamp(inspect.dist + e.deltaY * 0.0006, 0.3, 0.95); e.preventDefault(); } }, { passive: false });
 document.addEventListener('pointerlockchange', () => {
@@ -269,7 +279,9 @@ function gameFrame(v: View, dt: number) {
   const st = s.state;
   const phoneOpen = ui.isPhoneOpen();
   if (!paused) {
-    const moving = !phoneOpen && !inspect && document.pointerLockElement === canvas;
+    const active = document.activeElement;
+    const typing = active instanceof HTMLElement && (active.isContentEditable || active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
+    const moving = !inspect && !typing && (phoneOpen || document.pointerLockElement === canvas);
     const input: PlayerInput = {
       forward: moving ? (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) : 0,
       strafe: moving ? (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) : 0,
@@ -280,6 +292,8 @@ function gameFrame(v: View, dt: number) {
   const p = st.player;
   v.camera.position.set(p.pos.x, p.y + EYE_HEIGHT, p.pos.z);
   v.camera.rotation.set(pitch, yaw, 0);
+  const wantFov = zooming && !paused && !phoneOpen && !inspect ? ZOOM_FOV : BASE_FOV;
+  v.camera.fov += (wantFov - v.camera.fov) * Math.min(1, dt * 9);
   if (inspect) { inspect.mesh.rotation.set(inspect.ry, inspect.rx, 0); inspect.mesh.position.z += (inspect.dist - inspect.mesh.position.z) * 0.2; }
 
   const sky = s.sky(), weather = s.weather();
@@ -310,12 +324,19 @@ function gameFrame(v: View, dt: number) {
   const fwd = v.camera.getDirection(Vector3.Forward());
   audio.setListener(v.camera.position, fwd);
   if (frame % 6 === 0) {
+    const mood = s.sim.mysteryMood();
+    const scoreOn = mood.active && !paused && !st.ended && mode === 'game';
+    ui.setMystery(st.ended ? { active: false, intensity: 0, watched: false } : mood);
     const ctx = s.soundscapeContext();
     ctx.hushSources = ctx.hushSources.concat(v.silence.sourcesAt(st.time, p.pos));
     audio.setAmbient(computeSoundscape(ctx));
     audio.setDistortion(clamp((ex.active ? 0.35 + 0.5 * Math.max(ex.strip, ex.decompose, ex.sky) : 0) + inter.phone * 0.25, 0, 1));
     const loops = s.loops();
     const seen = new Set<string>();
+    if (scoreOn) {
+      seen.add('mystery-score'); loopIds.add('mystery-score');
+      audio.setLoop('mystery-score', 'mystery_music', undefined, 0.2 + mood.intensity * 0.65);
+    }
     for (const l of loops) { seen.add(l.id); loopIds.add(l.id); audio.setLoop(l.id, l.kind, l.pos, l.gain); }
     const wd = ctx.waterDistance;
     if (wd < 80) { seen.add('water'); loopIds.add('water'); audio.setLoop('water', 'water', { x: p.pos.x, y: p.y, z: p.pos.z }, clamp(1 - wd / 80, 0, 1) * 0.6); }
@@ -387,6 +408,7 @@ function exposeDev() {
     look: (y: number, p: number) => { yaw = y; pitch = p; },
     teleport: (x: number, z: number) => { if (view) { view.session.state.player.pos = { x, z }; view.session.state.player.y = view.session.model.groundAt(x, z); } },
     photo: () => { pendingPhoto = true; },
+    zoom: (on: boolean) => { zooming = on; },
     ttsStatus: () => tts.status(),
   };
 }

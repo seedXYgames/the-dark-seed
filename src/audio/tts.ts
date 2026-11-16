@@ -17,16 +17,33 @@ function matches(voiceLang: string, lang: Lang): boolean {
   return l === lang || l.startsWith(lang + '-');
 }
 
+// Il narratore è l'agente, un uomo. Le API vocali non dichiarano il genere: si riconosce dal nome,
+// usando i nomi delle voci di macOS/iOS, Windows/Edge, Chrome e Android.
+const MALE = /\b(luca|cosimo|diego|giuseppe|benigno|calimero|gianni|lorenzo|rinaldo|alex|daniel|fred|tom|aaron|arthur|evan|nathan|oliver|reed|rishi|ralph|gordon|lee|guy|andrew|brian|christopher|eric|roger|steffan|ryan|thomas|david|mark|george|james|liam|william|davis|tony|jason|male|uomo|maschile)\b/;
+const FEMALE = /\b(alice|federica|paola|elsa|isabella|fiammetta|elena|palmira|pierina|imelda|samantha|karen|moira|tessa|fiona|victoria|ava|allison|susan|zira|hazel|aria|jenny|emma|libby|sonia|serena|kate|martha|nicky|zoe|joanna|salli|kimberly|ivy|female|donna|femminile)\b/;
+// Voci di qualità più umana: neurali o scaricate in alta qualità dal sistema (gratuite).
+const NATURAL = /natural|neural|premium|enhanced|avanzat|migliorat|siri|wavenet|studio/;
+
+export function voiceGender(name: string): 'male' | 'female' | 'unknown' {
+  const n = String(name ?? '').toLowerCase();
+  if (FEMALE.test(n) && !/\bmale\b/.test(n)) return 'female';
+  if (MALE.test(n)) return 'male';
+  return 'unknown';
+}
+
 /**
- * Sceglie la voce per la lingua: prima quelle locali (nessuna dipendenza remota), poi quella
- * predefinita, poi la variante regionale più comune, infine l'ordine fornito dal browser.
+ * Sceglie la voce per la lingua: maschile prima di tutto, poi la più naturale, poi locale,
+ * poi la variante regionale più comune. Una voce femminile si usa solo se non c'è altro.
  */
 export function chooseVoice<V extends VoiceInfo>(voices: readonly V[], lang: Lang): V | null {
   let best: V | null = null;
-  let bestScore = -1;
+  let bestScore = -1e9;
   for (const v of voices) {
     if (!v || !matches(v.lang, lang)) continue;
+    const g = voiceGender(v.name);
     const score =
+      (g === 'male' ? 100 : g === 'unknown' ? 0 : -100) +
+      (NATURAL.test(String(v.name ?? '').toLowerCase()) ? 40 : 0) +
       (v.localService === true ? 8 : 0) + (v.default === true ? 4 : 0) +
       (CANONICAL[lang].includes(normLang(v.lang)) ? 2 : 0);
     if (score > bestScore) {

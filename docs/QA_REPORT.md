@@ -1,5 +1,39 @@
 # Rapporto di verifica
 
+## Verifica degli ultimi aggiornamenti — 16 novembre 2026
+
+Aggiornamento successivo: osservatore persistente, musica e indicatore. 160 test totali (10 nuovi
+su persistenza, distanza, immobilità sotto osservazione, riposizionamento fuori campo, fine turno,
+percezione, dissolvenze, SMS e anomalie locali). La ricetta musicale passa anche i test Web Audio
+su sorgenti, programmazione e arresto dei loop. Build e audit ripetuti. Nel browser, seed 0:
+osservatore presente a circa 71 m dallo spawn; dopo l'attivazione compare «Ti senti osservato»,
+con animazione `tds-event-pulse`, e il livello musicale sale gradualmente. Screenshot:
+`docs/screenshots/watcher-indicator.png`. Nessun errore shader o nuova eccezione; audio non ascoltato.
+
+Eseguita sulla copia locale macOS, con i cambiamenti di torcia, fauna, incontri e comandi:
+
+- `npm test`: 12 file, 150 test superati. I dieci nuovi test coprono gruppi/seed, generazione raggiungibile,
+  stealth, luce/corsa/rumori, occlusione, perdita delle tracce, morte e fuga innocua degli alieni.
+- `npm run build`: riuscito, controllo TypeScript incluso; pacchetto principale circa 1,74 MB.
+- `npm run audit:static`: superato su sorgenti e nuova build; `git diff --check -- src tests tools`: pulito.
+- `npm run harness -- 40 1000`: 39 turni completati, una morte causata dalla setta (seed 1000), zero errori
+  di percorso. L'harness ora distingue le morti dai fallimenti di navigazione; non considera la morte una vittoria.
+- Browser Chromium: nuova intro, M apre la scheda Mappa; W tenuto per 0,9 s muove il giocatore di circa
+  2,25 m con mappa aperta. Verificati fari iniziali accesi.
+- Rendering osservato nei seed 7, 13, 14 e 78; screenshot in `docs/screenshots/encounter-*.png`.
+  Animale confrontato nello stesso punto con e senza fascio in `fauna-dark.png` e `fauna-torch.png`:
+  silhouette scura senza torcia, mantello leggibile sotto il fascio. Nessun errore di compilazione shader.
+- Browser: Bigfoot raggiunge il giocatore, appare «Sei stato ucciso»; «Riprova lo stesso turno» avvia
+  una nuova sessione con lo stesso seed e stato non terminato.
+- Le verifiche ravvicinate usano il teletrasporto di sviluppo; il confronto della fauna sposta e ferma
+  un cervo soltanto nella pagina di prova. Nessuna modifica alla generazione di produzione per i test visivi.
+- Nessuna eccezione JavaScript osservata; un 404 del favicon già presente, estraneo al gioco.
+
+Limiti: nuova sintesi audio verificata automaticamente, non ascoltata; inseguimento con aggiramento locale
+degli ostacoli, senza pianificazione globale attraverso edifici e ponti. Le misure non certificano il target FPS.
+
+## Rapporto della consegna precedente
+
 Ambiente: container Linux, Node.js 22.23, Chromium headless (Playwright) con rendering software SwiftShader
 (`--use-gl=angle --use-angle=swiftshader`). Nessuna scheda grafica, nessuna uscita audio, nessuna voce di sistema.
 Data: 16 novembre 2026.

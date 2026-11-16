@@ -1,5 +1,5 @@
 // Contratto tra la sessione di gioco (host) e la simulazione autonoma del mondo.
-import type { ActorView, ExtremeRenderState, Facts, LocalAlterations, SkyState, SpontaneousKind, WeatherState } from '../core/api';
+import type { ActorView, ExtremeRenderState, Facts, LocalAlterations, MysteryMood, SkyState, SpontaneousKind, WeatherState } from '../core/api';
 import type {
   EventOrigin, ObjState, ObjectKind, PhoneMessage, SessionState, StreamName, Vec2, WorldEvent, WorldObjectSpec, WorldSpec,
 } from '../core/contracts';
@@ -48,6 +48,7 @@ export interface SimHost {
 }
 
 export interface ISimulation {
+  mysteryMood(): MysteryMood;
   /** Passo fisso (dt = 0.1 s). Deve essere deterministico dato lo stato e gli stream. */
   step(dt: number): void;
   /** Attori da disegnare (entro ~250 m dal giocatore), con posizione 3D. */

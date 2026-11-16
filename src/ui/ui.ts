@@ -1,7 +1,7 @@
 // Interfaccia DOM di The Dark Seed: schermate, HUD, telefono, didascalia d'ispezione ed effetti
 // a schermo intero, sovrapposti al canvas WebGL. L'interfaccia non chiede mai il pointer lock.
 import './ui.css';
-import type { IUi, PhoneTab, PhoneView, ScreenId, SummaryView, UiCallbacks } from '../core/api';
+import type { IUi, MysteryMood, PhoneTab, PhoneView, ScreenId, SummaryView, UiCallbacks } from '../core/api';
 import type { Lang, Settings } from '../core/contracts';
 import { t } from '../i18n/strings';
 import { ScreenEffects } from './effects';
@@ -25,6 +25,8 @@ export class Ui implements IUi {
   private readonly effects: ScreenEffects;
 
   private readonly hud: HTMLElement;
+  private readonly mysteryEl: HTMLElement;
+  private readonly mysteryLabel: HTMLElement;
   private readonly promptEl: HTMLElement;
   private readonly subtitleEl: HTMLElement;
   private readonly subSpeaker: HTMLElement;
@@ -66,6 +68,13 @@ export class Ui implements IUi {
     // ---- HUD
     this.hud = el('div', 'tds-hud');
     this.hud.hidden = true;
+    this.mysteryEl = el('div', 'tds-event');
+    this.mysteryEl.hidden = true;
+    this.mysteryEl.setAttribute('role', 'status');
+    const eventDot = el('span', 'tds-event-dot'); eventDot.setAttribute('aria-hidden', 'true');
+    this.mysteryLabel = el('span');
+    this.mysteryEl.append(eventDot, this.mysteryLabel);
+    this.hud.appendChild(this.mysteryEl);
     const dot = el('div', 'tds-dot');
     dot.setAttribute('aria-hidden', 'true');
     this.promptEl = el('div', 'tds-prompt');
@@ -208,6 +217,7 @@ export class Ui implements IUi {
   }
 
   private resetHud(): void {
+    this.setMystery({ active: false, intensity: 0, watched: false });
     this.setPrompt(null);
     this.setSubtitle(null);
     this.setHints([]);
@@ -373,6 +383,15 @@ export class Ui implements IUi {
     this.show('summary');
   }
 
+  setMystery(mood: MysteryMood): void {
+    this.mysteryEl.hidden = !mood.active;
+    const key = mood.watched ? 'hud.watched' : 'hud.strangeEvent';
+    if (this.mysteryLabel.dataset.i18n !== key) {
+      this.mysteryLabel.dataset.i18n = key;
+      this.mysteryLabel.textContent = t(this.settings.lang, key);
+    }
+  }
+
   setScreenEffect(kind: 'none' | 'code_rain' | 'white' | 'static' | 'flash', intensity: number): void {
     this.effects.set(kind, intensity);
   }
@@ -388,6 +407,11 @@ export class Ui implements IUi {
     const key = ev.key;
     if (this.screen === 'game') {
       if (!this.phone.isOpen()) return;
+      if (ev.code === 'KeyM' && !ev.repeat) {
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        this.openPhone('map');
+        return;
+      }
       const isT = key === 't' || key === 'T' || ev.code === 'KeyT';
       if (key !== 'Escape' && !isT) return;
       // il tasto che ha appena aperto il telefono non deve richiuderlo nello stesso evento

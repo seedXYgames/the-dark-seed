@@ -340,9 +340,25 @@ export class Screens {
     settings.type = 'button';
     settings.dataset.nav = '';
     settings.addEventListener('click', () => this.host.go('settings'));
-    nav.append(start, settings);
+    const exit = i18n(el('button', 'tds-menu-item'), 'menu.exit');
+    exit.type = 'button';
+    exit.dataset.nav = '';
+    nav.append(start, settings, exit);
     inner.append(title, nav);
-    p.appendChild(inner);
+    // un browser chiude solo le schede aperte da uno script: altrimenti resta uno schermo nero di congedo
+    const bye = el('div', 'tds-exit');
+    bye.hidden = true;
+    const back = i18n(el('button', 'tds-btn tds-btn-quiet'), 'menu.exitBack');
+    back.type = 'button';
+    back.dataset.nav = '';
+    bye.append(i18n(el('p', 'tds-exit-text'), 'menu.exitDone'), back);
+    exit.addEventListener('click', () => {
+      this.host.callbacks.onExit?.();
+      try { window.close(); } catch { /* ignorato */ }
+      window.setTimeout(() => { inner.hidden = true; bye.hidden = false; back.focus(); }, 200);
+    });
+    back.addEventListener('click', () => { bye.hidden = true; inner.hidden = false; this.host.callbacks.onExitCancelled?.(); exit.focus(); });
+    p.append(inner, bye);
     return p;
   }
 
@@ -425,7 +441,7 @@ export class Screens {
       (v) => t(this.host.lang(), 'settings.meters', { n: Math.round(v) }),
       (v) => change({ drawDistance: v }),
     );
-    panel.appendChild(row('settings.drawDistance', this.sDistance.el, idD));
+    // il mondo è sempre disegnato per intero: la distanza di disegno non è più un'impostazione
 
     const idF = this.uid('fog');
     this.setFog = onOff(idF, (on) => change({ fogEffects: on }));
@@ -539,7 +555,7 @@ export class Screens {
     const controls = el('div', 'tds-controls');
     controls.appendChild(i18n(el('h3', 'tds-h3'), 'pause.controls'));
     const list = el('ul', 'tds-controls-list');
-    for (const k of ['hint.move', 'hint.run', 'hint.interact', 'hint.torch', 'hint.phone', 'hint.photo', 'hint.pause']) {
+    for (const k of ['hint.move', 'hint.run', 'hint.interact', 'hint.zoom', 'hint.torch', 'hint.phone', 'hint.map', 'hint.photo', 'hint.pause']) {
       list.appendChild(i18n(el('li'), k));
     }
     controls.appendChild(list);
@@ -593,7 +609,8 @@ export class Screens {
     const lang = this.host.lang();
     const body = this.summaryBody;
     body.textContent = '';
-    body.appendChild(i18n(el('h2', 'tds-summary-title'), 'summary.title'));
+    body.appendChild(i18n(el('h2', 'tds-summary-title'), view.outcome === 'killed' ? 'summary.killed' : 'summary.title'));
+    if (view.outcome === 'killed') body.appendChild(i18n(el('p', 'tds-muted'), 'summary.killedText'));
 
     const facts = el('dl', 'tds-facts');
     const fact = (key: string, value: string) => {
@@ -657,6 +674,41 @@ export class Screens {
       body.appendChild(list);
     }
 
+    if (view.chronicle && view.chronicle.length) {
+      body.appendChild(i18n(el('h3', 'tds-h3'), 'summary.chronicle'));
+      body.appendChild(i18n(el('p', 'tds-muted tds-chronicle-note'), 'summary.chronicleNote'));
+      const list = el('ol', 'tds-chronicle');
+      for (const c of view.chronicle) {
+        const li = el('li', `tds-chronicle-row${c.rare ? ' is-rare' : ''}${c.seen ? '' : ' is-unseen'}`);
+        li.append(el('span', 'tds-chronicle-time', c.time), el('span', 'tds-chronicle-place', c.place), el('span', 'tds-chronicle-text', c.text));
+        if (!c.seen) li.appendChild(i18n(el('span', 'tds-chronicle-tag'), 'summary.unseen'));
+        list.appendChild(li);
+      }
+      body.appendChild(list);
+      if (view.chronicleText) {
+        const dl = i18n(el('button', 'tds-btn tds-btn-quiet tds-chronicle-dl'), 'summary.downloadLog');
+        dl.type = 'button';
+        dl.dataset.nav = '';
+        const text = view.chronicleText;
+        dl.addEventListener('click', () => {
+          try {
+            const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = `the-dark-seed-${view.seed}.txt`;
+            document.body.appendChild(a); a.click(); a.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+          } catch { /* scaricamento non disponibile: il registro resta leggibile a schermo */ }
+        });
+        body.appendChild(dl);
+      }
+    }
+
+    if (view.outcome === 'killed') {
+      const retry = i18n(el('button', 'tds-btn tds-btn-primary'), 'summary.retry');
+      retry.type = 'button'; retry.dataset.nav = '';
+      retry.addEventListener('click', () => this.host.callbacks.onStartGame(view.seed));
+      body.appendChild(retry);
+    }
     const back = i18n(el('button', 'tds-btn tds-btn-primary tds-summary-back'), 'summary.toMenu');
     back.type = 'button';
     back.dataset.nav = '';

@@ -9,9 +9,9 @@ const KINDS: SoundKind[] = [
   'tent_zip', 'breaker', 'metal_clank', 'bin_tip', 'twig', 'owl', 'fox', 'deer', 'crows', 'frog', 'splash',
   'vehicle_pass', 'vehicle_start', 'car_door', 'typing', 'paper', 'camera', 'sms', 'battery', 'click', 'steps_far',
   'voice_far', 'knock', 'hum_anom', 'whisper_anom', 'tone_anom', 'thunder', 'branch_fall', 'fire_douse', 'ui',
-  'torch_click', 'rustle', 'chair_scrape', 'report_sent',
+  'torch_click', 'rustle', 'chair_scrape', 'report_sent', 'screech', 'nightbird', 'alien_call', 'bigfoot_growl', 'cult_chant',
 ];
-const LOOP_KINDS: LoopKind[] = ['generator', 'water', 'fire', 'lamp_buzz', 'anom_drone', 'engine_idle'];
+const LOOP_KINDS: LoopKind[] = ['generator', 'water', 'fire', 'lamp_buzz', 'anom_drone', 'engine_idle', 'mystery_music'];
 const SURFACES: Surface[] = ['grass', 'dirt', 'road', 'wood', 'snow', 'floor', 'wet'];
 const LEVELS: SoundscapeLevels = { wind: 0.6, rain: 0.8, insects: 0.5, frogs: 0.9, birds: 0.7, water: 0.4, leaves: 0.6, human: 0.2, room: 0.1, hush: 0 };
 

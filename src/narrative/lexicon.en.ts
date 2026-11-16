@@ -69,6 +69,8 @@ export const EN_ANIMALS: Record<AnimalKey, EnNoun> = {
   raccoon: n('raccoon', 'raccoons'),
   owl: n('owl', 'owls'),
   crows: n('crow', 'crows', true),
+  rabbit: n('rabbit', 'rabbits'),
+  nightbird: n('night bird', 'night birds'),
 };
 
 const LOW_NOUNS: Partial<Record<SubjectKey, EnNoun>> = {
@@ -135,6 +137,8 @@ const SOUND: Record<SoundKey, string> = {
   car_door: 'a car door',
   vehicle_start: 'an engine starting',
   frog: 'a frog croaking',
+  screech: 'a long, hoarse screech',
+  nightbird: 'a bird call I could not place',
 };
 
 const COLOR: Record<ColorKey, string> = {

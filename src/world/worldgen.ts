@@ -7,7 +7,7 @@ import {
 import { Rng, clamp, streamFor } from '../core/rng';
 import { layoutPoi } from './layouts';
 import { WorldModel, toWorld } from './model';
-import { personName, poiName } from './names';
+import { officerName, personName, poiName } from './names';
 import {
   GRID_MIN, GRID_N, GRID_STEP, applyPoiFlatten, buildBaseHeights, forestField, lakeRadiusAt, polyLens,
   polylineHit, rawHeight, sampleGrid, waterDepth,
@@ -416,7 +416,7 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
   const spec: WorldSpec = {
     seed, generatorVersion: GENERATOR_VERSION, size: WORLD_SIZE, attempt, terrain, pois: c.pois, entry: { id: 'entry', pos: entryPos },
     edges, bridges, buildings: [], objects: [], carSpawn: { pos: carPos, rotY: carPoi.rotY }, playerSpawn: { pos: carPos, yaw: carPoi.rotY },
-    scenic: [], zones: [], sky: makeSky(seed), weather: makeWeather(seed), officer: personName(nameRng.fork('officer')),
+    scenic: [], zones: [], sky: makeSky(seed), weather: makeWeather(seed), officer: officerName(nameRng.fork('officer')),
     colleague: personName(nameRng.fork('colleague')), farLights: [], mysteries: [],
   };
   for (const p of c.pois) layoutPoi(spec, p, streamFor(seed, 'objects').fork(tag + p.id), bridges.find((b) => b.poiId === p.id), (x, z) => sampleGrid(heights, x, z));

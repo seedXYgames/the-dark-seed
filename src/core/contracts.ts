@@ -18,7 +18,7 @@ export type L10n = Record<Lang, string>;
 export type StreamName =
   | 'worldgen' | 'poi' | 'objects' | 'flora' | 'sky' | 'weather' | 'npc' | 'fauna' | 'missions'
   | 'mysteries' | 'anomaly' | 'rare' | 'sms' | 'ui' | 'names' | 'drift' | 'voice' | 'soundscape'
-  | 'environment' | 'illusion' | 'torch';
+  | 'environment' | 'illusion' | 'torch' | 'encounters';
 
 export interface Vec2 { x: number; z: number }
 
@@ -246,7 +246,7 @@ export interface Observation {
 
 // ---------------------------------------------------------------- attori
 
-export type ActorKind = 'npc' | 'fauna' | 'phenomenon' | 'anomaly' | 'illusion';
+export type ActorKind = 'npc' | 'fauna' | 'phenomenon' | 'anomaly' | 'illusion' | 'encounter';
 export type CapabilityId =
   | 'light' | 'motion' | 'audio' | 'appear' | 'vanish' | 'interfere' | 'alter_local' | 'displace' | 'perceptual';
 
@@ -397,6 +397,7 @@ export interface SessionState {
   extreme: { predisposed: boolean; plan?: ExtremePlan; startedAt?: number; done: boolean };
   ended: boolean;
   endedAt?: number;
+  death?: { actorId: string; kind: 'bigfoot' | 'cultist' };
   abandoned: boolean;
 }
 

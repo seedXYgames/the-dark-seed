@@ -14,6 +14,7 @@ import type { WorldModel } from '../world/model';
 import {
   clamp01, dirFromAzEl, distantHaze, fogDensity, fogLinear, hash3, makePalette, mix, qualityParams, skyColors, sstep, stutterTime,
   type QualityParams, type RGB,
+  VIEW_ALL,
 } from './envMath';
 import { TerrainRenderer, envShared } from './terrainMesh';
 import { ForestRenderer } from './forest';
@@ -41,6 +42,7 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
   private moonDir: RGB = [0, 1, 0];
   private time = 0;
   private animTime = 0;
+  private windPhase = 0;
   private extreme: ExtremeRenderState = { ...NO_EXTREME };
   private decomposed = false;
   private disposed = false;
@@ -55,7 +57,7 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
     this.prevFog = { mode: scene.fogMode, density: scene.fogDensity, start: scene.fogStart, end: scene.fogEnd, color: scene.fogColor.clone() };
     this.prevScaling = scene.getEngine().getHardwareScalingLevel();
     this.terrain = new TerrainRenderer(scene, model);
-    this.forest = new ForestRenderer(scene, model, this.terrain.fields, this.q, gfx.drawDistance);
+    this.forest = new ForestRenderer(scene, model, this.terrain.fields, this.q, VIEW_ALL);
     this.water = new WaterRenderer(scene, model);
     this.sky = new SkyRenderer(scene);
     this.distant = new DistantRenderer(scene, model);
@@ -75,7 +77,7 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
     this.gfx = { ...gfx };
     this.q = qualityParams(gfx.quality);
     this.scene.getEngine().setHardwareScalingLevel(1 / Math.min(1, Math.max(0.5, gfx.renderScale)));
-    this.forest.setQuality(this.q, gfx.drawDistance);
+    this.forest.setQuality(this.q, VIEW_ALL);
     this.fx.setQuality(this.q);
     this.rig.applySettings(gfx, this.q);
     this.terrain.setReceiveShadows(gfx.shadows);
@@ -101,7 +103,7 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
       c.mesh.freezeWorldMatrix();
     }
     for (const ch of this.forest.chunks) {
-      const all = ch.rocks ? [...ch.near, ...ch.far, ch.rocks] : [...ch.near, ...ch.far];
+      const all = ch.rocks ? [...ch.near, ...ch.far, ...ch.bushes, ch.rocks] : [...ch.near, ...ch.far, ...ch.bushes];
       for (const m of all) { m.position.set(ch.x, ch.y, ch.z); m.scaling.set(1, 1, 1); m.rotation.set(0, 0, 0); m.freezeWorldMatrix(); }
     }
   }
@@ -168,6 +170,10 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
     envShared.snow = clamp01(weather.snowCover);
     envShared.wet = clamp01(weather.wetness) * (1 - envShared.snow * 0.7);
     envShared.strip = strip;
+    // vento sulla vegetazione: la fase avanza più in fretta con le raffiche, così non ci sono salti di frequenza
+    this.windPhase += adt * (0.7 + 1.6 * weather.wind);
+    const wAmp = 0.1 + 0.9 * clamp01(weather.wind);
+    envShared.windX = Math.sin(weather.windDir) * wAmp; envShared.windZ = Math.cos(weather.windDir) * wAmp; envShared.time = this.windPhase % 4096;
 
     this.rig.update(dt, camPos, pal, alter, torch, weather.fog + (dens > 0.004 ? 0.08 : 0), precip, this.fx.flash, strip);
     this.terrain.update(envShared.wet);
@@ -190,7 +196,7 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
     if (this.disposed) return;
     this.disposed = true;
     Object.assign(this.extreme, NO_EXTREME);
-    envShared.snow = 0; envShared.wet = 0; envShared.strip = 0;
+    envShared.snow = 0; envShared.wet = 0; envShared.strip = 0; envShared.windX = 0; envShared.windZ = 0;
     this.rig.dispose(); this.fx.dispose(); this.distant.dispose(); this.sky.dispose(); this.water.dispose(); this.forest.dispose(); this.terrain.dispose();
     const s = this.scene, p = this.prevFog;
     s.fogMode = p.mode; s.fogDensity = p.density; s.fogStart = p.start; s.fogEnd = p.end; s.fogColor.copyFrom(p.color);

@@ -115,7 +115,7 @@ export function layoutPoi(spec: WorldSpec, poi: Poi, rng: Rng, bridge: BridgeSpe
 
   switch (poi.type) {
     case 'car_park': {
-      const car = add('police_car', 3.4, 0, { lrot: 0, state: { headlights: false, beacon: true } });
+      const car = add('police_car', 3.4, 0, { lrot: 0, state: { headlights: true, beacon: true } });
       const tp = toWorld(0, -2.55, car.pos.x, car.pos.z, car.rotY);
       const trunk = add('car_trunk', 0, 0, { pos: tp, rotY: car.rotY, yOff: 0.75, state: { open: false } });
       if (rng.chance(0.5)) add('battery', 0, 0, { pos: tp, rotY: car.rotY, yOff: 0.8, containerId: trunk.id, state: { taken: false } });
@@ -278,7 +278,8 @@ export function layoutPoi(spec: WorldSpec, poi: Poi, rng: Rng, bridge: BridgeSpe
       spec.objects.find((o) => o.kind === 'switch' && o.poiId === poi.id)!.links!.push(cl.id);
       sign(10, 9, 'gas');
       add('bin', 4.2, -4, { state: { tipped: false, content: 'litter' } });
-      if (rng.chance(0.5)) add('vehicle', -4.2, 7, { lrot: 0, state: vehicleState(rng) });
+      // fermo accanto alla colonnina, fra la pensilina e il chiosco (mai sulle colonne)
+      if (rng.chance(0.5)) add('vehicle', -0.8, 4.75, { lrot: Math.PI / 2, state: vehicleState(rng) });
       if (rng.chance(0.62)) add('battery', 0, 0, { pos: BW(-2.2, b.d / 2 + 0.25), y: b.floorY + 0.95, rotY: b.rotY, state: { taken: false } });
       add('panel', 0, 0, { pos: BW(2.4, b.d / 2 + 0.08), rotY: b.rotY, y: b.floorY + 1.3, state: { open: false, breaker: rng.chance(0.25) ? 'tripped' : 'ok' }, links: [cl.id], buildingId: b.id });
       cl.state.breaker = `${poi.id}.panel0`;

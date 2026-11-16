@@ -95,6 +95,7 @@ const sentences = (t: string): number => t.split(/(?<=[.!?])\s+/).length;
 
 const SPECIES: Record<string, RegExp> = {
   deer: /\b(cerv[oi]|deer)\b/i, fox: /\b(volp[ei]|fox(es)?)\b/i, raccoon: /\b(procion[ei]|raccoons?)\b/i, owl: /\b(guf[oi]|owls?)\b/i, crows: /\b(corv[oi]|crows?)\b/i,
+  rabbit: /\b(conigli[oi]?|rabbits?)\b/i, nightbird: /\b(uccell[oi] notturn[oi]|night birds?)\b/i,
 };
 const NEVER = /\b(ghosts?|fantasm[ai]|anomal\w*|aliens?|alien[oi]|supernatural|soprannaturale|paranormal\w*|illusion\w*|because|perché|caused|causat\w*|a causa|due to|spirit\w*)\b/i;
 

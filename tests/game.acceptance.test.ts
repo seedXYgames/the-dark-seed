@@ -33,6 +33,7 @@ describe('turno', () => {
   it('comincia vicino all\'auto con il briefing via SMS e gli incarichi nel telefono', () => {
     const s = make(909);
     const car = s.objects({ kind: 'police_car' })[0];
+    expect(s.state.objects[car.id].headlights).toBe(true);
     expect(Math.hypot(car.pos.x - s.state.player.pos.x, car.pos.z - s.state.player.pos.z)).toBeLessThan(12);
     idle(s, 30);
     expect(s.state.messages.length).toBeGreaterThanOrEqual(1);
@@ -97,5 +98,24 @@ describe('turno', () => {
     for (let i = 0; i < 4000; i++) s.update(SIM_DT, { forward: 1, strafe: 0, run: true, yaw: Math.PI / 2, pitch: 0 });
     expect(Math.abs(s.state.player.pos.x)).toBeLessThanOrEqual(700);
     expect(Math.abs(s.state.player.pos.z)).toBeLessThanOrEqual(700);
+  });
+});
+
+describe('registro di fine turno', () => {
+  it('racconta cosa è successo, anche ciò che non si è visto, nella lingua scelta', () => {
+    for (const lang of ['it', 'en'] as const) {
+      const s = make(2024, lang);
+      expect(new Bot(s).playShift().ok).toBe(true);
+      const sum = s.summary('http://localhost/');
+      expect(sum.chronicle!.length).toBeGreaterThan(8);
+      expect(sum.chronicle!.some((c) => !c.seen)).toBe(true);
+      for (const c of sum.chronicle!) { expect(c.time).toMatch(/^\d\d:\d\d$/); expect(c.text).not.toMatch(/\{|undefined/); expect(c.place.length).toBeGreaterThan(2); }
+      expect(sum.chronicleText).toContain('2024');
+    }
+  });
+
+  it('l\'agente è sempre un uomo', () => {
+    const female = ['Harper', 'Nora', 'June', 'Ellen', 'Tessa', 'Ruth', 'Claire', 'Maeve', 'Lena', 'Dana', 'Irene', 'Paige', 'Joan', 'Vera', 'Greta', 'Hazel', 'Lorna', 'Wren', 'Opal', 'Faye'];
+    for (let seed = 0; seed < 60; seed++) expect(female).not.toContain(generateWorld(seed).spec.officer.first);
   });
 });

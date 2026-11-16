@@ -9,11 +9,11 @@ export function pickPersonality(seed: number): Personality {
 
 /** Parametri della voce sintetica: moderati, diversi per profilo. */
 export const VOICE_STYLE: Record<Personality, { rate: number; pitch: number }> = {
-  reserved: { rate: 0.88, pitch: 0.88 },
+  reserved: { rate: 0.9, pitch: 0.9 },
   pragmatic: { rate: 1.0, pitch: 0.98 },
-  ironic: { rate: 0.98, pitch: 1.04 },
+  ironic: { rate: 0.98, pitch: 0.97 },
   skeptical: { rate: 0.93, pitch: 0.92 },
-  nervous: { rate: 1.05, pitch: 1.1 },
+  nervous: { rate: 1.05, pitch: 1.0 },
 };
 
 /** Propensione di base a commentare ad alta voce (0..1). */

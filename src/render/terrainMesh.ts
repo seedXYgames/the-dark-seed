@@ -17,11 +17,13 @@ import { MASK_N, MASK_STEP, type WorldModel } from '../world/model';
 import { clamp01, mix, sstep } from './envMath';
 
 /** Stato condiviso da tutti i materiali dell'ambiente (aggiornato una volta per frame). */
-export const envShared = { snow: 0, wet: 0, strip: 0 };
+export const envShared = { snow: 0, wet: 0, strip: 0, windX: 0, windZ: 0, time: 0 };
 
 export class EnvMaterialPlugin extends MaterialPluginBase {
   /** Soglia della normale oltre cui si deposita la neve. */
   snowThreshold = 0.35;
+  /** Quanto il vento piega la geometria (0 = rigida). Lo spostamento cresce con l'altezza locale del vertice. */
+  sway = 0;
   constructor(material: Material) {
     super(material, 'TdsEnv', 210, { TDSENV: false });
     this._enable(true);
@@ -29,12 +31,33 @@ export class EnvMaterialPlugin extends MaterialPluginBase {
   override getClassName(): string { return 'TdsEnvPlugin'; }
   override prepareDefines(defines: MaterialDefines): void { (defines as unknown as Record<string, boolean>).TDSENV = true; }
   override getUniforms() {
-    return { ubo: [{ name: 'tdsEnv', size: 4, type: 'vec4' }], fragment: '#ifdef TDSENV\nuniform vec4 tdsEnv;\n#endif\n' };
+    return {
+      ubo: [{ name: 'tdsEnv', size: 4, type: 'vec4' }, { name: 'tdsWind', size: 4, type: 'vec4' }],
+      fragment: '#ifdef TDSENV\nuniform vec4 tdsEnv;\n#endif\n', vertex: '#ifdef TDSENV\nuniform vec4 tdsWind;\n#endif\n',
+    };
   }
   override bindForSubMesh(ubo: UniformBuffer): void {
     ubo.updateFloat4('tdsEnv', envShared.snow, envShared.wet, envShared.strip, this.snowThreshold);
+    ubo.updateFloat4('tdsWind', envShared.windX, envShared.windZ, envShared.time, this.sway);
   }
-  override getCustomCode(shaderType: string) {
+  override getCustomCode(shaderType: string): { [pointName: string]: string } | null {
+    if (shaderType === 'vertex') return {
+      // vento: oscillazione lenta sottovento più un tremolio rapido, sfasati per posizione (ogni pianta si muove per conto suo)
+      CUSTOM_VERTEX_UPDATE_WORLDPOS: `
+#ifdef TDSENV
+if(tdsWind.w>0.0){
+  float tdsH=max(positionUpdated.y,0.0);
+  float tdsK=tdsWind.w*tdsH*sqrt(tdsH);
+  float tdsP=dot(worldPos.xz,vec2(0.113,0.071));
+  float tdsG=0.55+sin(tdsWind.z*1.15+tdsP)+0.45*sin(tdsWind.z*2.7+tdsP*2.3);
+  float tdsF=sin(tdsWind.z*6.3+worldPos.x*2.1+worldPos.z*1.7+worldPos.y*1.3);
+  vec2 tdsW=tdsWind.xy;
+  float tdsA=length(tdsW)+1e-4;
+  worldPos.xz+=tdsW*tdsG*tdsK+vec2(-tdsW.y,tdsW.x)*tdsF*tdsK*0.22;
+  worldPos.y-=tdsA*abs(tdsG)*tdsK*0.12;
+}
+#endif`,
+    };
     if (shaderType !== 'fragment') return null;
     return {
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: `
@@ -51,13 +74,13 @@ color.rgb=mix(color.rgb,vec3(1.0),tdsEnv.z);
 }
 
 /** Materiale standard dell'ambiente: budget luci 8, plugin meteo, non pickable lato mesh. */
-export function makeEnvMaterial(name: string, scene: Scene, snowThreshold = 0.35): StandardMaterial {
+export function makeEnvMaterial(name: string, scene: Scene, snowThreshold = 0.35, sway = 0): StandardMaterial {
   const m = new StandardMaterial(name, scene);
   m.maxSimultaneousLights = 8;
   m.specularColor = new Color3(0.02, 0.02, 0.02);
   m.specularPower = 24;
   const p = new EnvMaterialPlugin(m);
-  p.snowThreshold = snowThreshold;
+  p.snowThreshold = snowThreshold; p.sway = sway;
   return m;
 }
 

@@ -9,6 +9,9 @@ import { clamp, smoothstep, type Rng } from '../core/rng';
 import { EXTREME_IDLE, extremeAudioAt, extremeStateAt, makeExtremePlan } from './extreme';
 import type { ISimulation, SimFactory, SimHost } from './host';
 import { isLampLit } from './objects';
+import { Encounters } from './encounters';
+import { Watcher } from './watcher';
+import { MysteryMoodDirector } from './mysteryMood';
 
 const DIRS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
 const bearing = (from: Vec2, to: Vec2) => DIRS[((Math.round(Math.atan2(to.x - from.x, to.z - from.z) / (Math.PI / 4)) % 8) + 8) % 8];
@@ -22,6 +25,9 @@ export const MAX_DRIFT = 6;
 interface PlannedSms { t: number; kind: SpontaneousKind; done?: boolean }
 
 export class Simulation implements ISimulation {
+  private readonly encounters: Encounters;
+  private readonly watcher: Watcher;
+  private readonly mood: MysteryMoodDirector;
   private readonly st;
   private readonly model;
   private readonly spec;
@@ -40,6 +46,10 @@ export class Simulation implements ISimulation {
   private thunderT = 40; private vehicleT: number;
   private lampFaults: { id: string; until: number }[] = [];
   private illusionSounds = 0;
+  private readonly rSky: Rng;
+  private skyT: number; private skyN = 0;
+  /** Luce non identificata che attraversa il cielo: tratta a tre tempi (arrivo, eventuale sosta, uscita). */
+  private skyObj: { t0: number; p0: [number, number, number]; v1: [number, number, number]; t1: number; hold: number; v2: [number, number, number]; dur: number; color: [number, number, number]; radius: number; id: string } | null = null;
   private readonly doorOpen = (id: string) => this.st.objects[id]?.state === 'open';
 
   constructor(private readonly h: SimHost) {
@@ -47,7 +57,11 @@ export class Simulation implements ISimulation {
     this.rNpc = h.rng('npc'); this.rFauna = h.rng('fauna'); this.rAnom = h.rng('anomaly'); this.rEnv = h.rng('environment');
     this.rDrift = h.rng('drift'); this.rSms = h.rng('sms'); this.rIll = h.rng('illusion');
     this.vehicleT = this.rEnv.range(90, 400);
+    this.rSky = this.rEnv.fork('sky'); this.skyT = this.rSky.range(150, 800);
     this.spawnNpcs(); this.spawnFauna(); this.spawnAnomalies(); this.spawnIllusions(); this.planSms();
+    this.encounters = new Encounters(h);
+    this.watcher = new Watcher(h);
+    this.mood = new MysteryMoodDirector(h);
     if (this.st.extreme.predisposed && !this.st.extreme.plan) this.st.extreme.plan = makeExtremePlan(this.st.seed);
     const w = h.weather();
     this.wasPrecip = w.precip > 0.25; this.wasFog = w.fog > 0.55;
@@ -146,7 +160,18 @@ export class Simulation implements ISimulation {
         a.data.y = r.range(4.5, 8); a.data.callT = r.range(40, 400);
       }
     };
-    perch('owl', r.int(1, 2)); perch('crows', r.int(0, 1));
+    perch('owl', r.int(2, 4)); perch('crows', r.int(1, 2)); perch('nightbird', r.int(1, 3));
+    // conigli: piccole colonie sparse, brucano vicino alla tana
+    const rr = r.fork('rabbits');
+    for (let c = rr.int(4, 7); c > 0; c--) {
+      const warren = far(this.spot(rr, centre, 40, 640));
+      if (!warren) continue;
+      for (let i = rr.int(2, 4); i > 0; i--) {
+        const p = this.spot(rr, warren, 1, 9) ?? warren;
+        const a = this.actor(`fauna${++n}`, 'fauna', 'rabbit', p, { speed: 0.8 });
+        a.data.hx = warren.x; a.data.hz = warren.z; a.stepTimer = rr.range(2, 25); a.heading = rr.range(0, 6.28);
+      }
+    }
   }
 
   private spawnAnomalies() {
@@ -206,12 +231,65 @@ export class Simulation implements ISimulation {
       else if (a.kind === 'illusion') this.stepIllusion(a, dt);
       else if (a.kind === 'phenomenon') { a.stepTimer -= dt; if (a.stepTimer <= 0) { a.present = false; a.visible = false; a.lightOn = false; } }
     }
+    this.encounters.step(dt);
+    this.watcher.step(dt);
+    this.mood.step(dt);
+    if (st.ended) return;
+    this.stepSky(dt);
     this.envT -= dt;
     if (this.envT <= 0) { this.envT = 5; this.stepEnvironment(5); }
     this.driftT -= dt;
     if (this.driftT <= 0) { this.driftT = 45; this.stepDrift(); }
     this.slowT -= dt;
     if (this.slowT <= 0) { this.slowT = 1; this.stepMysteries(); this.stepSms(); this.stepExtreme(); this.refreshFields(); }
+  }
+
+  // ---------------------------------------------------------------- cielo
+
+  /** Ogni tanto, a cielo abbastanza sgombro, una luce attraversa la notte: nessun suono, nessuna spiegazione. */
+  private stepSky(dt: number) {
+    const st = this.st, r = this.rSky;
+    if (this.skyObj) { if (st.time - this.skyObj.t0 >= this.skyObj.dur) this.skyObj = null; this.skyLight(); return; }
+    this.skyT -= dt;
+    if (this.skyT > 0) return;
+    const w = this.h.weather();
+    if (this.h.sky().ambient > 0.4 || w.cloud > 0.72 || w.fog > 0.5) { this.skyT = r.range(60, 180); return; }
+    this.skyT = r.range(420, 1300);
+    const pl = st.player.pos, y0 = this.model.groundAt(pl.x, pl.z);
+    const a0 = r.range(0, Math.PI * 2), d0 = r.range(520, 820), alt = r.range(230, 430);
+    const p0: [number, number, number] = [pl.x + Math.sin(a0) * d0, y0 + alt, pl.z + Math.cos(a0) * d0];
+    // punta a un punto che passa a 120–380 m dal giocatore
+    const miss = r.range(120, 380) * (r.chance(0.5) ? 1 : -1), tx = pl.x + Math.cos(a0) * miss, tz = pl.z - Math.sin(a0) * miss;
+    const len = Math.hypot(tx - p0[0], tz - p0[2]) || 1, speed = r.range(70, 150);
+    const v1: [number, number, number] = [((tx - p0[0]) / len) * speed, r.range(-4, 4), ((tz - p0[2]) / len) * speed];
+    const mode = r.pick(['straight', 'straight', 'stop', 'turn'] as const);
+    const t1 = (len / speed) * r.range(0.85, 1.1), hold = mode === 'stop' ? r.range(2, 4.5) : 0;
+    let v2 = v1, tail = len / speed;
+    if (mode !== 'straight') {
+      const turn = r.range(0.9, 2.0) * (r.chance(0.5) ? 1 : -1), c = Math.cos(turn), s = Math.sin(turn), k = mode === 'stop' ? r.range(2.5, 4) : 1.3;
+      v2 = [(v1[0] * c - v1[2] * s) * k, r.range(8, 40), (v1[0] * s + v1[2] * c) * k];
+      tail = mode === 'stop' ? r.range(3, 5) : r.range(5, 8);
+    }
+    const color = r.pick([[0.85, 0.92, 1], [1, 0.82, 0.55], [0.7, 1, 0.85], [1, 0.6, 0.5]] as [number, number, number][]);
+    this.skyObj = { t0: st.time, p0, v1, t1, hold, v2, dur: t1 + hold + tail, color, radius: r.range(14, 24), id: `sky${++this.skyN}` };
+    const ev = this.h.emit({ type: 'sky_light', pos: { x: tx, z: tz }, origin: 'environment', radius: 0, props: { mode, altitude: Math.round(alt) }, tags: ['sky', 'unidentified'] });
+    if (!st.player.indoors) ev.perceivedByPlayer = true;
+    this.skyLight();
+  }
+
+  /** Aggiorna (o toglie) la luce del cielo nelle alterazioni correnti, a ogni passo. */
+  private skyLight() {
+    const L = this.alter.lights, i = L.findIndex((l) => l.id.startsWith('sky'));
+    if (i >= 0) L.splice(i, 1);
+    const o = this.skyObj;
+    if (!o) return;
+    const t = this.st.time - o.t0, ta = Math.min(t, o.t1), tb = Math.max(0, t - o.t1 - o.hold);
+    const moving = t < o.t1 ? o.v1 : tb > 0 ? o.v2 : null;
+    const fade = smoothstep(0, 1.2, t) * (1 - smoothstep(o.dur - 1.2, o.dur, t));
+    L.unshift({
+      id: o.id, pos: { x: o.p0[0] + o.v1[0] * ta + o.v2[0] * tb, y: o.p0[1] + o.v1[1] * ta + o.v2[1] * tb, z: o.p0[2] + o.v1[2] * ta + o.v2[2] * tb },
+      color: o.color, intensity: fade, radius: o.radius, sky: true, vel: moving ? { x: moving[0], y: moving[1], z: moving[2] } : undefined,
+    });
   }
 
   /** Reazioni a catena: ogni evento sonoro nuovo viene sentito dagli attori nel suo pubblico. */
@@ -388,14 +466,15 @@ export class Simulation implements ISimulation {
   private flee(a: ActorState, from: Vec2, causeEventId?: number) {
     const r = this.rFauna;
     let dx = a.pos.x - from.x, dz = a.pos.z - from.z;
-    const d = Math.hypot(dx, dz) || 1, run = r.range(40, 75), ang = r.range(-0.5, 0.5);
+    const rabbit = a.archetype === 'rabbit';
+    const d = Math.hypot(dx, dz) || 1, run = rabbit ? r.range(16, 34) : r.range(40, 75), ang = rabbit ? r.range(-0.95, 0.95) : r.range(-0.5, 0.5);
     dx /= d; dz /= d;
     const c = Math.cos(ang), s = Math.sin(ang);
     a.data.tx = clamp(a.pos.x + (dx * c - dz * s) * run, -LIMIT, LIMIT); a.data.tz = clamp(a.pos.z + (dx * s + dz * c) * run, -LIMIT, LIMIT);
-    a.state = 'flee'; a.stepTimer = r.range(6, 11); a.data.stuck = 0;
+    a.state = 'flee'; a.stepTimer = rabbit ? r.range(2.5, 4.5) : r.range(6, 11); a.data.stuck = 0;
     if (a.cooldown <= 0) {
-      a.cooldown = 8;
-      this.h.emit({ type: 'fauna_flee', pos: a.pos, origin: 'fauna', actorId: a.id, causeEventId, radius: 12, sound: { kind: a.archetype === 'deer' && r.chance(0.25) ? 'deer' : r.chance(0.5) ? 'twig' : 'rustle', loudness: a.archetype === 'deer' ? 42 : 24 }, tags: ['reaction'] });
+      a.cooldown = rabbit ? 14 : 8;
+      this.h.emit({ type: 'fauna_flee', pos: a.pos, origin: 'fauna', actorId: a.id, causeEventId, radius: 12, sound: { kind: a.archetype === 'deer' && r.chance(0.25) ? 'deer' : !rabbit && r.chance(0.5) ? 'twig' : 'rustle', loudness: a.archetype === 'deer' ? 42 : rabbit ? 16 : 24 }, tags: ['reaction'] });
     }
   }
 
@@ -409,27 +488,53 @@ export class Simulation implements ISimulation {
     if (best) a.pos = best;
   }
 
+  /** Spostamento silenzioso di un rapace notturno: metà delle volte verso la zona del giocatore, così lo si sente. */
+  private driftBird(a: ActorState) {
+    const trees = this.model.trees, nt = Math.floor(trees.length / 5), r = this.rFauna, pl = this.st.player.pos;
+    const nearPlayer = r.chance(0.5), c = nearPlayer ? pl : a.pos, lo = nearPlayer ? 45 : 40, hi = nearPlayer ? 150 : 260;
+    for (let i = 0; i < 40 && nt > 0; i++) {
+      const k = r.int(0, nt - 1), p = { x: trees[k * 5], z: trees[k * 5 + 1] }, d = dist(p, c);
+      if (d < lo || d > hi || Math.abs(p.x) > LIMIT || Math.abs(p.z) > LIMIT || dist(p, pl) < 30 || this.h.playerCanSee(p)) continue;
+      a.pos = p; a.data.y = r.range(4.5, 8);
+      return;
+    }
+  }
+
   private stepFauna(a: ActorState, dt: number) {
     const r = this.rFauna, pl = this.st.player, dP = this.h.playerDistance(a.pos), night = this.h.sky().ambient < 0.4;
     if (a.state === 'perch') {
       if (dP < 11) { this.relocateBird(a); return; }
       a.data.callT = Number(a.data.callT) - dt;
       if (Number(a.data.callT) <= 0) {
-        a.data.callT = r.range(70, 380);
-        const w = this.h.weather();
-        if (a.archetype === 'owl' && night && w.precip < 0.4 && !this.hushedAt(a.pos)) this.h.emit({ type: 'owl_call', pos: a.pos, origin: 'fauna', actorId: a.id, radius: 5, sound: { kind: 'owl', loudness: 150 }, tags: ['reaction'] });
+        const w = this.h.weather(), quiet = w.precip < 0.4 && !this.hushedAt(a.pos);
+        if (a.archetype === 'owl') {
+          a.data.callT = r.range(40, 170);
+          if (night && quiet) this.h.emit({ type: 'owl_call', pos: a.pos, origin: 'fauna', actorId: a.id, radius: 5, sound: { kind: 'owl', loudness: 170 }, tags: ['reaction'] });
+        } else if (a.archetype === 'nightbird') {
+          a.data.callT = r.range(60, 240);
+          if (night && quiet) this.h.emit({ type: 'bird_call', pos: a.pos, origin: 'fauna', actorId: a.id, radius: 5, sound: { kind: r.chance(0.4) ? 'screech' : 'nightbird', loudness: 180 }, tags: ['reaction'] });
+        } else {
+          a.data.callT = r.range(160, 560);
+          if (quiet && r.chance(0.5)) this.h.emit({ type: 'crows_call', pos: a.pos, origin: 'fauna', actorId: a.id, radius: 5, sound: { kind: 'crows', loudness: 150 }, tags: ['reaction'] });
+        }
+        if (a.archetype !== 'crows' && r.chance(0.35)) this.driftBird(a);
       }
       return;
     }
-    const speedRun = a.archetype === 'deer' ? 7.5 : a.archetype === 'fox' ? 6 : 3.6;
+    const rabbit = a.archetype === 'rabbit';
+    const speedRun = a.archetype === 'deer' ? 7.5 : a.archetype === 'fox' ? 6 : rabbit ? 8.4 : 3.6;
     if (a.state === 'flee') {
       a.stepTimer -= dt;
-      if (this.walk(a, Number(a.data.tx), Number(a.data.tz), speedRun, dt) || a.stepTimer <= 0 || Number(a.data.stuck) > 1) { a.state = 'idle'; a.stepTimer = r.range(15, 50); a.data.hx = a.pos.x; a.data.hz = a.pos.z; }
+      if (this.walk(a, Number(a.data.tx), Number(a.data.tz), speedRun, dt) || a.stepTimer <= 0 || Number(a.data.stuck) > 1) {
+        a.state = 'idle'; a.stepTimer = rabbit ? r.range(5, 14) : r.range(15, 50);
+        if (!rabbit) { a.data.hx = a.pos.x; a.data.hz = a.pos.z; } // il coniglio, passato lo spavento, torna verso la tana
+      }
       return;
     }
     if (this.st.time >= a.nextThink) {
       a.nextThink = this.st.time + 0.5;
-      const alarm = (pl.running ? 46 : a.archetype === 'raccoon' ? 12 : 21);
+      // il coniglio scappa appena il giocatore lo vede (o gli arriva addosso); gli altri reagiscono alla distanza
+      const alarm = rabbit ? (dP < 34 && this.h.playerCanSee(a.pos) ? (pl.running ? 34 : 24) : pl.running ? 24 : 7) : (pl.running ? 46 : a.archetype === 'raccoon' ? 12 : 21);
       if (dP < alarm) { this.flee(a, pl.pos); return; }
       if (a.archetype === 'deer') { const fox = this.st.actors.find((b) => b.archetype === 'fox' && b.present && dist(b.pos, a.pos) < 30); if (fox) { this.flee(a, fox.pos); return; } }
     }
@@ -461,7 +566,7 @@ export class Simulation implements ISimulation {
     }
     a.stepTimer -= dt;
     if (a.stepTimer <= 0) {
-      const p = this.spot(r, { x: Number(a.data.hx), z: Number(a.data.hz) }, 6, a.archetype === 'fox' ? 90 : 40, a.archetype !== 'raccoon');
+      const p = rabbit ? this.spot(r, { x: Number(a.data.hx), z: Number(a.data.hz) }, 1, 13) : this.spot(r, { x: Number(a.data.hx), z: Number(a.data.hz) }, 6, a.archetype === 'fox' ? 90 : 40, a.archetype !== 'raccoon');
       if (p) { a.state = 'move'; a.data.tx = p.x; a.data.tz = p.z; a.data.stuck = 0; } else a.stepTimer = 10;
     }
   }
@@ -772,12 +877,13 @@ export class Simulation implements ISimulation {
       hush.push({ pos: pl, radius: 500, strength: 1 });
     }
     this.alter = alter; this.inter = inter; this.hush = hush;
+    this.skyLight();
   }
 
   actorViews(): ActorView[] {
     const out: ActorView[] = [], pl = this.st.player.pos;
     for (const a of this.st.actors) {
-      if (!a.present || dist(a.pos, pl) > 250) continue;
+      if (!a.present || dist(a.pos, pl) > 700) continue;
       out.push({
         id: a.id, kind: a.kind, archetype: a.archetype, heading: a.heading, moving: a.data.moving === true, lightOn: a.lightOn, visible: a.visible,
         pos: { x: a.pos.x, y: this.model.groundAt(a.pos.x, a.pos.z) + Number(a.data.y ?? 0), z: a.pos.z },
@@ -787,6 +893,7 @@ export class Simulation implements ISimulation {
     return out;
   }
 
+  mysteryMood() { return this.mood.view(); }
   localAlterations(): LocalAlterations { return this.alter; }
   hushSources() { return this.hush; }
   interference() { return this.inter; }

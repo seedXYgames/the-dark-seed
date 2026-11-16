@@ -228,9 +228,19 @@ export function buildProp(c: Ctx, o: WorldObjectSpec, st: ObjState, drift: Trans
         plate: police ? `PD ${100 + (c.seed % 900)}` : String(st.plate ?? ''), unit: `UNIT ${10 + (c.seed % 89)}`,
       });
       meshes.push(...car.meshes); own.push(...car.own);
+      let beacon = false;
+      const redOff = car.beacons?.red.material, blueOff = car.beacons?.blue.material;
       onSet = (s) => {
         car.head.material = (police ? s.headlights : s.lights) ? M.headOn : M.bulbOff;
         if (car.amber) car.amber.material = s.beacon ? M.amberOn : M.bulbOff;
+        beacon = !!s.beacon;
+        if (car.beacons && !beacon) { car.beacons.red.material = redOff!; car.beacons.blue.material = blueOff!; }
+      };
+      if (car.beacons) onTick = (_dt, t) => {
+        const phase = (t % 0.9) / 0.9;
+        car.beacons!.red.material = beacon && (phase < 0.12 || (phase > 0.2 && phase < 0.32)) ? M.redOn : redOff!;
+        car.beacons!.blue.material = beacon && ((phase > 0.5 && phase < 0.62) || (phase > 0.7 && phase < 0.82)) ? M.blueOn : blueOff!;
+        return beacon;
       };
       break;
     }

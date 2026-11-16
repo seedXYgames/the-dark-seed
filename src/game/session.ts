@@ -10,9 +10,11 @@ import {
   type Vec2, type WorldEvent, type WorldObjectSpec, type WorldSpec,
 } from '../core/contracts';
 import { Rng, clamp, hash2, streamFor } from '../core/rng';
+import { TORCH_ANGLE } from '../core/torch';
 import { NarrativeComposer } from '../narrative/composer';
 import { pickPersonality } from '../narrative/personality';
 import { clockString, skyAt, weatherAt } from '../sim/environment';
+import { chronicle, chronicleText } from '../sim/chronicle';
 import { isExtremeSeed } from '../sim/extreme';
 import type { Cause, ISimulation, SimFactory, SimHost } from '../sim/host';
 import { MISSION_TYPES, generateMissions, missionSatisfiedBy } from '../sim/missions';
@@ -40,6 +42,7 @@ export interface Presentation {
 export interface FocusAction { objectId?: string; actorId?: string; action: ActionId; kind: string }
 
 class NullSimulation implements ISimulation {
+  mysteryMood() { return { active: false, intensity: 0, watched: false }; }
   step(): void {}
   actorViews(): ActorView[] { return []; }
   localAlterations(): LocalAlterations { return { rainUp: 0, shadowSkew: 0, reflectionShift: 0, dustFloat: 0, lights: [] }; }
@@ -408,7 +411,7 @@ export class GameSession implements SimHost {
       const ang = this.angleTo(a.pos);
       if (ang > 1.0) continue;
       const lit = a.lightOn || a.archetype === 'light';
-      const range = lit ? 160 : Math.max(torchOn && ang < 0.5 ? 40 : 0, 7 + 62 * amb);
+      const range = lit ? 160 : Math.max(torchOn && ang < TORCH_ANGLE / 2 ? 40 : 0, 7 + 62 * amb);
       if (d > range || !this.lineOfSight(a.pos)) continue;
       const last = this.seenActorAt.get(a.id) ?? -1000;
       a.data.seenByPlayer = true;
@@ -749,10 +752,13 @@ export class GameSession implements SimHost {
   summary(baseUrl: string): SummaryView {
     const st = this.state;
     const sep = baseUrl.includes('?') ? baseUrl.slice(0, baseUrl.indexOf('?')) : baseUrl;
+    const log = chronicle(st, this.spec, st.lang);
     return {
       seed: st.seed, officer: `${this.spec.officer.first} ${this.spec.officer.last}`, durationSeconds: Math.round(st.endedAt ?? st.time),
+      outcome: st.death ? 'killed' : 'completed',
       missionsCompleted: st.missions.filter((m) => m.state === 'reported').length,
       reports: st.reports.map((r) => ({ title: st.missions.find((m) => m.id === r.missionId)!.text[st.lang], text: r.text })), shareUrl: `${sep.split('#')[0]}?seed=${st.seed}`,
+      chronicle: log, chronicleText: chronicleText(log, `The Dark Seed — seed ${st.seed} — ${this.spec.officer.first} ${this.spec.officer.last}`, st.lang),
     };
   }
 

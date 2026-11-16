@@ -23,7 +23,7 @@ const POIS = Object.keys({
   car_park: true, cabin: true, campsite: true, picnic: true, town: true, gas_station: true, bridge: true,
   lake_dock: true, lookout: true, utility: true, restroom: true, roadside: true, clearing: true,
 } satisfies Record<PoiType, true>);
-const HINTS = ['move', 'run', 'interact', 'torch', 'phone', 'photo', 'pause', 'inspect', 'clickToResume'];
+const HINTS = ['move', 'run', 'interact', 'torch', 'phone', 'map', 'photo', 'pause', 'inspect', 'clickToResume'];
 const NOTICES = ['photoSaved', 'photoFull', 'reportSent', 'batteryTaken', 'torchDead', 'shiftNotDone', 'newMessage', 'noVoice'];
 const LANGS = ['it', 'en'] as const;
 

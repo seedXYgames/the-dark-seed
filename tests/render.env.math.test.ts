@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SkyState, WeatherState } from '../src/core/api';
 import { DEFAULT_SETTINGS } from '../src/core/contracts';
+import { torchProfile, TORCH_POWER } from '../src/core/torch';
 import {
   CHUNK_N, ambientIntensity, calibrate, chunkCenter, chunkDistance, chunkIndex, dirFromAzEl, fogDensity, fogLinear, groupByChunk, lodFor,
   luma, qualityParams, skyColors, stutterTime,
+  VIEW_ALL,
 } from '../src/render/envMath';
 
 const sky = (o: Partial<SkyState>): SkyState => ({
@@ -14,6 +16,23 @@ const wx = (o: Partial<WeatherState>): WeatherState => ({
   cloud: 0, fog: 0, precip: 0, precipType: 'none', wind: 0.2, windDir: 1, temperature: 8, wetness: 0, snowCover: 0, ...o,
 });
 const gfx = DEFAULT_SETTINGS.gfx;
+
+describe('profilo della torcia', () => {
+  it('sfuma senza corone piatte e conserva la penombra senza saturarla', () => {
+    expect(torchProfile(0)).toBeCloseTo(1);
+    let prev = 1;
+    for (let i = 1; i <= 100; i++) {
+      const next = torchProfile(i / 100);
+      expect(next).toBeGreaterThanOrEqual(0);
+      expect(next).toBeLessThan(prev);
+      expect(prev - next).toBeLessThan(0.035);
+      prev = next;
+    }
+    expect(torchProfile(1)).toBe(0);
+    expect(torchProfile(1.2)).toBe(0);
+    expect(TORCH_POWER * torchProfile(0.75)).toBeLessThan(1);
+  });
+});
 const dusk = sky({ hour: 20, sunElevation: -0.05, ambient: 0.4, moonLight: 0.1, starVisibility: 0.1 });
 const clearMoon = sky({});
 const overcast = sky({ moonElevation: -0.3, moonLight: 0, moonIllum: 0, ambient: 0.02, starVisibility: 0 });
@@ -66,9 +85,9 @@ describe('envMath: nebbia', () => {
     expect(fogDensity(wx({ fog: 1 }), clearMoon, gfx)).toBeGreaterThan(fogDensity(wx({ fog: 0 }), clearMoon, gfx) * 5);
     expect(fogDensity(wx({ fog: 0.3, precip: 1, precipType: 'snow' }), clearMoon, gfx)).toBeGreaterThan(fogDensity(wx({ fog: 0.3 }), clearMoon, gfx));
   });
-  it('nebbia lineare: sempre presente e entro la distanza di disegno', () => {
+  it('nebbia lineare: sempre presente e mai prima del bordo del mondo', () => {
     const l = fogLinear(wx({}), clearMoon, gfx);
-    expect(l.end).toBeLessThanOrEqual(gfx.drawDistance * 1.05 + 1e-6);
+    expect(l.end).toBeLessThanOrEqual(VIEW_ALL + 1e-6);
     expect(l.start).toBeLessThan(l.end);
     expect(fogLinear(wx({ fog: 1 }), clearMoon, gfx).end).toBeLessThan(l.end);
   });

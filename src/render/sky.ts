@@ -36,9 +36,9 @@ float stars(vec3 d,float scale,float thr,float seed){
   vec3 p=d*scale;vec3 c=floor(p);vec3 f=fract(p)-0.5;
   float h=h31(c+seed);
   vec3 o=(vec3(h31(c+seed+7.1),h31(c+seed+13.7),h31(c+seed+23.3))-0.5)*0.6;
-  float m=smoothstep(0.11,0.0,length(f-o));
+  float m=smoothstep(0.17,0.02,length(f-o));
   float tw=0.8+0.2*sin(uA.w*(1.5+h*3.0)+h*40.0);
-  return m*step(thr,h)*tw*(0.35+0.65*fract(h*91.7));
+  return m*step(thr,h)*tw*(0.45+0.55*fract(h*91.7));
 }
 void main(void){
   vec3 d=normalize(vDir);
@@ -58,15 +58,16 @@ void main(void){
   ca*=smoothstep(-0.02,0.10,d.y);
   float thick=smoothstep(1.0-cov*1.15,1.6-cov*0.9,n);
   // stelle
-  float sv=uA.y*(1.0-ca)*smoothstep(0.0,0.22,d.y+0.04);
+  // la copertura è già nella maschera delle nuvole: tra uno squarcio e l'altro le stelle restano nitide
+  float sv=sqrt(uA.y)*(1.0-ca)*smoothstep(0.0,0.2,d.y+0.04);
   if(sv>0.003){
-    float st=stars(d,150.0,0.90,uB.z)+0.6*stars(d,330.0,0.93,uB.z+31.0);
-    vec3 sc=mix(vec3(0.75,0.85,1.0),vec3(1.0,0.9,0.75),h31(floor(d*150.0)));
-    col+=sc*st*sv*1.5;
-    // fascia lattiginosa
+    // fascia lattiginosa: più densa di stelle minute e con un chiarore diffuso
     vec3 ax=normalize(vec3(sin(uB.z),0.45,cos(uB.z)));
-    float band=exp(-abs(dot(d,ax))*6.0);
-    col+=vec3(0.035,0.04,0.06)*band*sv*(0.5+fbm(d.xz*6.0+d.y*3.0));
+    float band=exp(-abs(dot(d,ax))*5.0);
+    float st=stars(d,90.0,0.66,uB.z)+0.7*stars(d,190.0,0.7-0.25*band,uB.z+31.0)+2.2*stars(d,32.0,0.9,uB.z+77.0);
+    vec3 sc=mix(vec3(0.75,0.85,1.0),vec3(1.0,0.9,0.75),h31(floor(d*90.0)));
+    col+=sc*st*sv*3.2;
+    col+=vec3(0.07,0.08,0.115)*band*sv*(0.35+fbm(d.xz*6.0+d.y*3.0));
   }
   // luna
   float mv=uB.y;

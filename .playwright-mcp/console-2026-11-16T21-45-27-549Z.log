@@ -1,0 +1,3 @@
+[     207ms] [LOG] BJS - [22:45:27]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://localhost:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45
+[     225ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:1
+[   32403ms] [LOG] BJS - [22:45:59]: Babylon.js v9.36.0 - WebGL2 - Parallel shader compilation @ http://localhost:5173/node_modules/.vite/deps/chunk-J4DZ2XK7.js?v=0a3cdf29:45

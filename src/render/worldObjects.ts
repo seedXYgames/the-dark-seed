@@ -19,6 +19,7 @@ import { type Built, buildBuilding, buildPlatform } from './buildings';
 import { buildProp, type PropVis, structKey } from './props';
 import { buildInspect } from './items';
 import { ActorsRenderer } from './actors';
+import { VIEW_ALL } from './envMath';
 
 interface GlowDef { kind: GlowKind; lx: number; ly: number; lz: number; size: number; mode: number; amp: number }
 interface Drifter { n: TransformNode; h: number }
@@ -208,8 +209,8 @@ export class WorldObjectsRenderer implements IWorldObjectsRenderer {
         case 'vehicle': if (st.lights) defs = [D('white', -0.62, 0.66, 2.26, 1.2), D('white', 0.62, 0.66, 2.26, 1.2)]; break;
         case 'police_car': {
           const d: GlowDef[] = [];
-          if (st.headlights) { d.push(D('white', -0.62, 0.66, 2.26, 1.3), D('white', 0.62, 0.66, 2.26, 1.3)); li = 1.1; lc = 2; ly = 0.9; lz = 3.6; }
-          if (st.beacon) { d.push(D('amber', -0.6, 1.58, -0.25, 0.55, 2, 0.22)); if (!low) d.push(D('amber', 0.6, 1.58, -0.25, 0.55, 2, 0.22)); }
+          if (st.headlights) { d.push(D('white', -0.635, 0.69, 2.29, 0.8), D('white', 0.635, 0.69, 2.29, 0.8)); li = 1.1; lc = 2; ly = 0.9; lz = 3.6; }
+          if (st.beacon) { d.push(D('red', -0.36, 1.74, -0.25, 0.48, 4)); d.push(D('blue', 0.36, 1.74, -0.25, 0.48, 5)); }
           if (d.length) defs = d;
           break;
         }
@@ -292,7 +293,7 @@ export class WorldObjectsRenderer implements IWorldObjectsRenderer {
     this.grpTimer -= dt;
     if (this.grpTimer <= 0) {
       this.grpTimer = 0.2;
-      const dd = this.c.gfx.drawDistance;
+      const dd = VIEW_ALL; // ogni luogo resta visibile da qualunque distanza
       for (const g of this.groups) {
         if (g.always) { if (!g.built) this.buildGroup(g); continue; }
         const act = Math.hypot(camPos.x - g.cx, camPos.z - g.cz) - g.r < dd * (g.active ? 1.08 : 1);
@@ -339,12 +340,16 @@ export class WorldObjectsRenderer implements IWorldObjectsRenderer {
         let k = 1;
         if (d.mode === 1) k = 1 - d.amp * (0.35 + 0.65 * Math.abs(Math.sin(t * 31 + r.hid) * Math.sin(t * 7.3 + j)));
         else if (d.mode === 2) k = 1 + d.amp * Math.sin(t * 1.6 + r.hid + j * 0.4);
-        else k = 0.85 + 0.15 * Math.sin(t * 11 + r.hid) + 0.1 * Math.sin(t * 27.1);
+        else if (d.mode === 4 || d.mode === 5) {
+          const ph = (t % 0.9) / 0.9;
+          const on = d.mode === 4 ? ph < 0.12 || (ph > 0.2 && ph < 0.32) : (ph > 0.5 && ph < 0.62) || (ph > 0.7 && ph < 0.82);
+          k = on ? 1 : 0.03;
+        } else k = 0.85 + 0.15 * Math.sin(t * 11 + r.hid) + 0.1 * Math.sin(t * 27.1);
         gl.scaling.setAll(d.size * k);
       }
     }
     this.updateLights(camPos, dt);
-    this.actors.sync(actors, dt, t);
+    this.actors.sync(actors, dt, t, _sky.ambient);
     if (this.extremeOn && this.decomp > 0) this.applyDecompose();
   }
 

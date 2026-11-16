@@ -126,6 +126,32 @@ describe('attori', () => {
     }
     throw new Error('nessuna illusione in 40 seed');
   });
+
+  it('i conigli brucano vicino alla tana e scappano quando il giocatore si avvicina', () => {
+    const s = make(203), rabbits = s.state.actors.filter((a) => a.archetype === 'rabbit');
+    expect(rabbits.length).toBeGreaterThanOrEqual(4);
+    const rb = rabbits[0], from = { x: rb.pos.x, z: rb.pos.z };
+    s.state.player.pos = { x: rb.pos.x + 5, z: rb.pos.z };
+    idle(s, 3);
+    expect(Math.hypot(rb.pos.x - from.x, rb.pos.z - from.z)).toBeGreaterThan(8);
+    expect(s.state.log.some((e) => e.type === 'fauna_flee' && e.actorId === rb.id)).toBe(true);
+  });
+
+  it('di notte gufi e uccelli notturni si fanno sentire, e a volte una luce attraversa il cielo', () => {
+    let owl = 0, bird = 0, heard = 0, sky = 0;
+    for (const seed of [94, 203, 241]) {
+      const s = make(seed);
+      idle(s, 1500);
+      for (const e of s.state.log) {
+        if (e.type === 'owl_call') owl++;
+        if (e.type === 'bird_call') bird++;
+        if ((e.type === 'owl_call' || e.type === 'bird_call') && e.perceivedByPlayer) heard++;
+        if (e.type === 'sky_light') { sky++; expect(e.sound).toBeUndefined(); }
+      }
+      for (const l of s.sim.localAlterations().lights) expect(Number.isFinite(l.pos.x + l.pos.y + l.pos.z)).toBe(true);
+    }
+    expect(owl).toBeGreaterThan(10); expect(bird).toBeGreaterThan(4); expect(heard).toBeGreaterThan(5); expect(sky).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('misteri', () => {

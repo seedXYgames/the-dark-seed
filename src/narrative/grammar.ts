@@ -26,11 +26,11 @@ export type DetailKey = (typeof DETAILS)[number];
 export const SOUNDS = [
   'steps_far', 'voice_far', 'metal_clank', 'owl', 'fox', 'deer', 'crows', 'knock', 'twig', 'vehicle_pass',
   'hum_anom', 'whisper_anom', 'tone_anom', 'door_bang', 'branch_fall', 'rustle', 'splash', 'thunder',
-  'chair_scrape', 'car_door', 'vehicle_start', 'frog',
+  'chair_scrape', 'car_door', 'vehicle_start', 'frog', 'screech', 'nightbird',
 ] as const;
 export type SoundKey = (typeof SOUNDS)[number];
 
-export const ANIMALS = ['deer', 'fox', 'raccoon', 'owl', 'crows'] as const;
+export const ANIMALS = ['deer', 'fox', 'raccoon', 'owl', 'crows', 'rabbit', 'nightbird'] as const;
 export type AnimalKey = (typeof ANIMALS)[number];
 
 export const COLORS = ['red', 'white', 'blue', 'green', 'yellow', 'orange', 'dark', 'grey', 'black', 'pale', 'amber'] as const;

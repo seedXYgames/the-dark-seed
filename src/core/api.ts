@@ -64,9 +64,11 @@ export type SoundKind =
   | 'drawer' | 'tent_zip' | 'breaker' | 'metal_clank' | 'bin_tip' | 'twig' | 'owl' | 'fox' | 'deer' | 'crows'
   | 'frog' | 'splash' | 'vehicle_pass' | 'vehicle_start' | 'car_door' | 'typing' | 'paper' | 'camera' | 'sms'
   | 'battery' | 'click' | 'steps_far' | 'voice_far' | 'knock' | 'hum_anom' | 'whisper_anom' | 'tone_anom'
-  | 'thunder' | 'branch_fall' | 'fire_douse' | 'ui' | 'torch_click' | 'rustle' | 'chair_scrape' | 'report_sent';
+  | 'thunder' | 'branch_fall' | 'fire_douse' | 'ui' | 'torch_click' | 'rustle' | 'chair_scrape' | 'report_sent' | 'screech' | 'nightbird'
+  | 'alien_call' | 'bigfoot_growl' | 'cult_chant';
 
-export type LoopKind = 'generator' | 'water' | 'fire' | 'lamp_buzz' | 'anom_drone' | 'engine_idle';
+export type LoopKind = 'generator' | 'water' | 'fire' | 'lamp_buzz' | 'anom_drone' | 'engine_idle' | 'mystery_music';
+export interface MysteryMood { active: boolean; intensity: number; watched: boolean }
 export type Surface = 'grass' | 'dirt' | 'road' | 'wood' | 'snow' | 'floor' | 'wet';
 
 export interface Vec3Like { x: number; y: number; z: number }
@@ -184,12 +186,17 @@ export interface PhoneView {
 }
 
 export interface SummaryView {
+  outcome?: 'completed' | 'killed';
   seed: number;
   officer: string;
   durationSeconds: number;
   missionsCompleted: number;
   reports: { title: string; text: string }[];
   shareUrl: string;
+  /** Registro di ciò che è accaduto davvero durante il turno (mostrato solo a fine turno). */
+  chronicle?: { time: string; place: string; text: string; seen: boolean; rare: boolean }[];
+  /** Lo stesso registro in testo semplice, per lo scaricamento. */
+  chronicleText?: string;
 }
 
 export interface UiCallbacks {
@@ -197,9 +204,12 @@ export interface UiCallbacks {
   onStartGame(seed: number): void;
   onSettingsChanged(settings: Settings): void;
   onResume(): void;
-  /** Abbandono volontario confermato: unica sconfitta. */
+  /** Abbandono volontario confermato. */
   onAbandon(): void;
   onBackToMenu(): void;
+  /** Voce «Esci» del menu: silenzia il gioco prima del congedo. */
+  onExit?(): void;
+  onExitCancelled?(): void;
   onPhoneClosed(): void;
   onTakePhoto(): void;
   onMessageRead(messageId: number): void;
@@ -215,6 +225,7 @@ export type ScreenId = 'loading' | 'menu' | 'settings' | 'intro' | 'game' | 'pau
 export type PhoneTab = 'messages' | 'tasks' | 'camera' | 'gallery' | 'map';
 
 export interface IUi {
+  setMystery(mood: MysteryMood): void;
   setSettings(settings: Settings): void;
   show(screen: ScreenId): void;
   current(): ScreenId;
@@ -250,7 +261,7 @@ export interface LocalAlterations {
   reflectionShift: number; // 0..1
   dustFloat: number; // 0..1
   /** Luci anomale visibili: posizione, colore e intensità. */
-  lights: { id: string; pos: Vec3Like; color: [number, number, number]; intensity: number; radius: number }[];
+  lights: { id: string; pos: Vec3Like; color: [number, number, number]; intensity: number; radius: number; /** Velocità (m/s) per interpolare tra un passo e l'altro. */ vel?: Vec3Like; /** Alta nel cielo: sopra la foschia del suolo. */ sky?: boolean }[];
 }
 
 export interface ExtremeRenderState {

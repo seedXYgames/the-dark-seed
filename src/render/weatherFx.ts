@@ -10,6 +10,7 @@ import type { WeatherState } from '../core/api';
 import { Rng } from '../core/rng';
 import { clamp01, sstep, type QualityParams, type SkyPalette } from './envMath';
 import { u3, u4 } from './sky';
+import { TORCH_PROFILE_GLSL, TORCH_COLOR } from '../core/torch';
 
 Effect.ShadersStore['tdsPrecipVertexShader'] = `
 precision highp float;
@@ -19,6 +20,7 @@ uniform vec3 uCam,uBox,uOffset,uVel,uTorchPos,uTorchDir,uAmb;
 uniform vec4 uP; // width, length, density, upFraction
 uniform vec4 uQ; // swayAmp, swayFreq, time, torch
 varying vec2 vUv;varying vec3 vLight;varying float vFade;
+${TORCH_PROFILE_GLSL}
 void main(void){
   float sp=0.75+0.25*floor(normal.x*2.999);
   float up=step(normal.y,uP.w)*step(0.0001,uP.w);
@@ -37,8 +39,8 @@ void main(void){
   if(fract(normal.z*7.31)>uP.z)gl_Position=vec4(2.0,2.0,2.0,1.0);
   vUv=uv;
   vec3 L=p-uTorchPos;float d=length(L);L/=max(d,0.001);
-  float cone=smoothstep(0.80,0.95,dot(L,uTorchDir))*max(0.0,1.0-d/30.0);
-  vLight=uAmb+vec3(1.0,0.93,0.8)*uQ.w*cone*1.6;
+  float cone=tdsTorchMask(p-uTorchPos,uTorchDir)*max(0.0,1.0-d/30.0);
+  vLight=uAmb+vec3(${TORCH_COLOR.map(c => c.toFixed(3)).join(',')})*uQ.w*cone*1.6;
   float dc=length(p-uCam);
   vFade=smoothstep(0.5*min(uBox.x,uBox.z),0.36*min(uBox.x,uBox.z),dc)*smoothstep(0.3,1.2,dc);
 }`;

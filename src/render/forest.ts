@@ -8,7 +8,7 @@ import { BoundingInfo } from '@babylonjs/core/Culling/boundingInfo';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Rng } from '../core/rng';
 import type { WorldModel } from '../world/model';
-import { CHUNK_N, CHUNK_SIZE, chunkCenter, chunkDistance, groupByChunk, hash3, lodFor, mix, sstep, type QualityParams } from './envMath';
+import { CHUNK_N, CHUNK_SIZE, chunkCenter, chunkDistance, chunkIndex, groupByChunk, hash3, lodFor, mix, sstep, type QualityParams } from './envMath';
 import { makeEnvMaterial, sampleField, type TerrainFields } from './terrainMesh';
 
 type C3 = [number, number, number];
@@ -193,6 +193,25 @@ function buildRock(seed: number): VertexData {
   return b.data(0.1);
 }
 
+/** Cespuglio alto (nocciolo, rovo, ginepro): masse di fogliame su fusti sottili. Altezza nominale ~1,4 m. */
+function buildBush(kind: number): VertexData {
+  const b = new Builder(), r = new Rng('tds.bush.' + kind);
+  const lo: C3 = kind === 0 ? [0.05, 0.10, 0.05] : kind === 1 ? [0.07, 0.09, 0.04] : [0.04, 0.08, 0.06];
+  const hi: C3 = kind === 0 ? [0.10, 0.17, 0.07] : kind === 1 ? [0.14, 0.15, 0.06] : [0.07, 0.13, 0.09];
+  const stem: C3 = [0.16, 0.12, 0.09];
+  const n = kind === 2 ? 3 : 5;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.28 + r.next(), d = i === 0 ? 0.05 : 0.3 + 0.35 * r.next(), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const cy = (kind === 2 ? 0.5 : i === 0 ? 1.0 : 0.5) + 0.35 * r.next(), rx = 0.3 + 0.2 * r.next(), ry = (kind === 2 ? 0.5 : 0.3) + 0.18 * r.next();
+    const p = b.v(x * 0.3 - 0.03, 0, z * 0.3, stem, 0.8), q = b.v(x * 0.3 + 0.03, 0, z * 0.3, stem, 0.8), t = b.v(x, cy, z, stem);
+    b.tri(p, q, t, x, 0.3, z + 5); b.tri(p, q, t, x, 0.3, z - 5);
+    blob(b, r, x, cy, z, rx, ry, lo, hi, 5);
+  }
+  return b.data(0.3);
+}
+const NBUSH = 3;
+const BUSH_CELL = 6.5;
+
 function buildCover(kind: number): VertexData {
   const b = new Builder(), r = new Rng('tds.cover.' + kind);
   if (kind === 0) { // ciuffo d'erba: lame triangolari
@@ -230,7 +249,7 @@ function writeMatrix(m: Float32Array, o: number, x: number, y: number, z: number
 
 export interface ForestChunk {
   index: number; x: number; y: number; z: number;
-  near: Mesh[]; far: Mesh[]; rocks: Mesh | null;
+  near: Mesh[]; far: Mesh[]; rocks: Mesh | null; bushes: Mesh[];
   lod: number; rocksOn: boolean;
 }
 
@@ -241,6 +260,8 @@ export class ForestRenderer {
   readonly treeMaterial: StandardMaterial;
   readonly rockMaterial: StandardMaterial;
   readonly coverMaterial: StandardMaterial;
+  readonly bushMaterial: StandardMaterial;
+  bushCount = 0;
   /** Chunk dettagliati attualmente visibili (candidati a proiettare ombre). */
   readonly nearActive: Mesh[] = [];
   private cover: Mesh[] = [];
@@ -251,10 +272,30 @@ export class ForestRenderer {
   treeCount = 0;
 
   constructor(private scene: Scene, private model: WorldModel, private fields: TerrainFields, private q: QualityParams, private drawDistance: number) {
-    this.treeMaterial = makeEnvMaterial('tds.tree', scene, 0.25);
+    this.treeMaterial = makeEnvMaterial('tds.tree', scene, 0.25, 0.0085);
     this.rockMaterial = makeEnvMaterial('tds.rock', scene, 0.3);
-    this.coverMaterial = makeEnvMaterial('tds.cover', scene, 0.6);
+    this.coverMaterial = makeEnvMaterial('tds.cover', scene, 0.6, 0.2);
     this.coverMaterial.backFaceCulling = false;
+    this.bushMaterial = makeEnvMaterial('tds.bush', scene, 0.4, 0.075);
+    this.bushMaterial.backFaceCulling = false;
+    const bushSrc = [0, 1, 2].map((k) => ({ vd: buildBush(k), material: this.bushMaterial }));
+    // cespugli alti: griglia deterministica su tutto il mondo, fuori da sentieri, acqua, radure curate e pendii ripidi
+    const bGroups: number[][] = [];
+    for (let i = 0; i < CHUNK_N * CHUNK_N; i++) bGroups.push([]);
+    const bush: number[] = []; // x, y, z, scala, rotazione, tipo
+    const salt = (model.spec.terrain.salt | 0) + 9100, bn = Math.floor(700 / BUSH_CELL);
+    for (let j = -bn; j < bn; j++)
+      for (let i = -bn; i < bn; i++) {
+        const h = hash3(i, j, salt);
+        if (h > 0.36) continue;
+        const x = (i + 0.1 + 0.8 * hash3(i, j, salt + 1)) * BUSH_CELL, z = (j + 0.1 + 0.8 * hash3(i, j, salt + 2)) * BUSH_CELL;
+        const fd = sampleField(fields.forest, x, z);
+        if (fd < 0.12 || (fd > 0.8 && h > 0.2)) continue; // più fitti ai margini del bosco che nel folto
+        if (sampleField(fields.slope, x, z) > 0.75 || model.pathMaskAt(x, z) > 0.02 || model.waterDepthAt(x, z) > 0) continue;
+        bGroups[chunkIndex(x, z)].push(bush.length / 6);
+        bush.push(x, model.heightAt(x, z), z, 0.7 + 0.9 * hash3(i, j, salt + 3), hash3(i, j, salt + 4) * 6.28, Math.floor(hash3(i, j, salt + 5) * NBUSH));
+      }
+    this.bushCount = bush.length / 6;
     // Nota: la geometria NON è condivisa tra i chunk, perché i buffer delle thin instances vivono sulla geometria.
     type Src = { vd: VertexData; material: StandardMaterial };
     const nearSrc: Src[] = VARIANTS.map((_, v) => ({ vd: buildTree(v), material: this.treeMaterial }));
@@ -281,14 +322,16 @@ export class ForestRenderer {
     };
     for (let ci = 0; ci < CHUNK_N * CHUNK_N; ci++) {
       const tl = tGroups[ci], rl = rGroups[ci];
-      if (!tl.length && !rl.length) continue;
+      const bl = bGroups[ci];
+      if (!tl.length && !rl.length && !bl.length) continue;
       const c = chunkCenter(ci);
       let ymin = Infinity, ymax = -Infinity;
       const ys: number[] = [];
       for (const k of tl) { const y = model.heightAt(trees[k * 5], trees[k * 5 + 1]); ys.push(y); if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
       const rys: number[] = [];
       for (const k of rl) { const y = model.heightAt(rocks[k * 4], rocks[k * 4 + 1]); rys.push(y); if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
-      const ch: ForestChunk = { index: ci, x: c.x, y: (ymin + ymax) / 2, z: c.z, near: [], far: [], rocks: null, lod: 2, rocksOn: false };
+      for (const k of bl) { const y = bush[k * 6 + 1]; if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
+      const ch: ForestChunk = { index: ci, x: c.x, y: (ymin + ymax) / 2, z: c.z, near: [], far: [], rocks: null, bushes: [], lod: 2, rocksOn: false };
       // vicino: una mesh per variante
       for (let v = 0; v < VARIANTS.length; v++) {
         let n = 0;
@@ -334,6 +377,18 @@ export class ForestRenderer {
         });
         ch.rocks = instance(`tds.rocks.${ci}`, rockSrc, mats, null, ch, 2, ymin, ymax + 3);
       }
+      for (let t = 0; t < NBUSH; t++) {
+        const sel = bl.filter((k) => bush[k * 6 + 5] === t);
+        if (!sel.length) continue;
+        const mats = new Float32Array(sel.length * 16), cols = new Float32Array(sel.length * 4);
+        sel.forEach((k, li) => {
+          const sc = bush[k * 6 + 3];
+          writeMatrix(mats, li * 16, bush[k * 6] - ch.x, bush[k * 6 + 1] - ch.y - 0.05, bush[k * 6 + 2] - ch.z, bush[k * 6 + 4], sc * (0.85 + 0.3 * hash3(k, 4, 9)), sc, sc * (0.85 + 0.3 * hash3(k, 5, 9)));
+          const tn = 0.8 + 0.45 * hash3(k, 1, 9), w = (hash3(k, 2, 9) - 0.5) * 0.2;
+          cols[li * 4] = tn * (1 + w); cols[li * 4 + 1] = tn; cols[li * 4 + 2] = tn * (1 - w); cols[li * 4 + 3] = 1;
+        });
+        ch.bushes.push(instance(`tds.bush.${t}.${ci}`, bushSrc[t], mats, cols, ch, 2, ymin, ymax + 4));
+      }
       this.chunks.push(ch);
     }
     this.buildCover();
@@ -378,7 +433,7 @@ export class ForestRenderer {
         const fd = sampleField(this.fields.forest, x, z);
         if (fd < 0.1 && hash3(i, j, 7006) > 0.25) continue; // POI e radure curate: quasi nulla
         if (sampleField(this.fields.slope, x, z) > 0.8) continue;
-        const kind = fd > 0.5 ? (h < 0.3 ? 1 : h < 0.42 ? 2 : 0) : (h < 0.5 ? 0 : h < 0.56 ? 2 : 1);
+        const kind = fd > 0.5 ? (h < 0.24 ? 1 : h < 0.44 ? 2 : 0) : (h < 0.4 ? 0 : h < 0.55 ? 2 : 1);
         const n = counts[kind];
         if (n >= this.coverCap) continue;
         const fade = sstep(R, R * 0.6, d); // cresce avvicinandosi: nessuna comparsa improvvisa
@@ -410,7 +465,7 @@ export class ForestRenderer {
         for (const m of ch.far) m.setEnabled(lod === 1);
       }
       const rocksOn = d <= Math.min(this.q.rockDist, this.drawDistance);
-      if (rocksOn !== ch.rocksOn && ch.rocks) { ch.rocksOn = rocksOn; ch.rocks.setEnabled(rocksOn); }
+      if (rocksOn !== ch.rocksOn) { ch.rocksOn = rocksOn; ch.rocks?.setEnabled(rocksOn); for (const m of ch.bushes) m.setEnabled(rocksOn); }
       if (lod === 0) for (const m of ch.near) this.nearActive.push(m);
     }
     return changed;
@@ -419,14 +474,15 @@ export class ForestRenderer {
   setWet(wet: number): void {
     const s = mix(0.02, 0.16, wet);
     this.treeMaterial.specularColor.set(s, s, s);
+    this.bushMaterial.specularColor.set(s, s, s);
     this.rockMaterial.specularColor.set(s * 1.6, s * 1.6, s * 1.7);
     this.rockMaterial.specularPower = mix(20, 48, wet);
   }
 
   dispose(): void {
-    for (const ch of this.chunks) { for (const m of ch.near) m.dispose(); for (const m of ch.far) m.dispose(); ch.rocks?.dispose(); }
+    for (const ch of this.chunks) { for (const m of ch.near) m.dispose(); for (const m of ch.far) m.dispose(); for (const m of ch.bushes) m.dispose(); ch.rocks?.dispose(); }
     this.chunks.length = 0; this.nearActive.length = 0;
     for (const m of this.cover) m.dispose();
-    this.treeMaterial.dispose(); this.rockMaterial.dispose(); this.coverMaterial.dispose();
+    this.treeMaterial.dispose(); this.rockMaterial.dispose(); this.coverMaterial.dispose(); this.bushMaterial.dispose();
   }
 }

@@ -16,10 +16,11 @@ export interface AudioEngineOptions {
 
 /** Volume di base e distanza di riferimento (m) per ogni suono: più è alta, più lontano si sente. */
 const META: Record<SoundKind, readonly [gain: number, ref: number]> = {
+  alien_call: [0.7, 20], bigfoot_growl: [0.85, 24], cult_chant: [0.6, 18],
   door_open: [0.5, 3], door_close: [0.6, 4], door_locked: [0.5, 3], door_bang: [0.65, 8], switch: [0.35, 1.5],
   generator_start: [0.4, 6], generator_stop: [0.35, 5], drawer: [0.4, 2], tent_zip: [0.4, 2.5], breaker: [0.6, 3],
-  metal_clank: [0.7, 6], bin_tip: [0.8, 7], twig: [0.5, 4], owl: [0.5, 8], fox: [0.7, 10], deer: [0.7, 10],
-  crows: [0.7, 10], frog: [0.4, 4], splash: [0.6, 5], vehicle_pass: [0.8, 12], vehicle_start: [0.4, 10],
+  metal_clank: [0.7, 6], bin_tip: [0.8, 7], twig: [0.5, 4], owl: [0.85, 24], fox: [0.8, 20], deer: [0.7, 12],
+  crows: [0.8, 18], screech: [0.8, 22], nightbird: [0.75, 20], frog: [0.4, 4], splash: [0.6, 5], vehicle_pass: [0.8, 12], vehicle_start: [0.4, 10],
   car_door: [0.7, 6], typing: [0.3, 1], paper: [0.3, 1], camera: [0.35, 1], sms: [0.4, 1], battery: [0.35, 1],
   click: [0.3, 1], steps_far: [0.5, 5], voice_far: [0.5, 7], knock: [0.7, 5], hum_anom: [0.5, 8],
   whisper_anom: [0.4, 4], tone_anom: [0.35, 8], thunder: [1, 40], branch_fall: [0.8, 8], fire_douse: [0.5, 3],
@@ -29,6 +30,7 @@ const META: Record<SoundKind, readonly [gain: number, ref: number]> = {
 const AMBIENT_META: Record<AmbientRecipeId, readonly [number, number]> = { droplet: [0.25, 1.5], chirp: [0.35, 5] };
 
 const LOOP_META: Record<LoopKind, readonly [gain: number, ref: number]> = {
+  mystery_music: [0.35, 1],
   generator: [0.2, 5], water: [0.32, 5], fire: [0.32, 3], lamp_buzz: [0.1, 1.5], anom_drone: [0.18, 7], engine_idle: [0.16, 5],
 };
 
@@ -701,9 +703,11 @@ export class AudioEngine implements IAudioEngine {
     }
     // uccelli: di notte rari richiami di rapaci, verso l'alba brevi frasi sempre più frequenti
     if (s.birds > 0.004) {
-      const owlRate = Math.min(s.birds, 0.25) * 0.16 * (1 - clamp((s.birds - 0.2) / 0.3, 0, 1));
+      // di notte: un richiamo ogni mezzo minuto circa nel bosco quieto (gufi, più di rado uccelli meno riconoscibili)
+      const owlRate = Math.min(s.birds, 0.25) * 0.42 * (1 - clamp((s.birds - 0.2) / 0.3, 0, 1));
       for (let i = Math.min(1, this.poisson(owlRate, dt)); i > 0; i--) {
-        this.spawn(RECIPES.owl, META.owl, { pos: this.around(35, 130, 12), gain: 0.9, pitch: this.rng.range(0.9, 1.12) });
+        const u = this.rng.next(), kind = u < 0.62 ? 'owl' : u < 0.82 ? 'nightbird' : 'screech';
+        this.spawn(RECIPES[kind], META[kind], { pos: this.around(30, 110, 12), gain: kind === 'owl' ? 1 : 0.8, pitch: this.rng.range(0.9, 1.12) });
       }
       const chirpRate = Math.max(0, s.birds - 0.16) * 3;
       for (let i = this.poisson(chirpRate, dt); i > 0; i--) {

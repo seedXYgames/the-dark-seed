@@ -156,13 +156,13 @@ export function weatherFogDensity(weather: WeatherState, sky: SkyState): number 
 
 /** Densità exp2 della nebbia di scena: cresce con weather.fog e non scende mai sotto ciò che nasconde il limite di disegno. */
 export function fogDensity(weather: WeatherState, sky: SkyState, gfx: GraphicsSettings): number {
-  return Math.max(weatherFogDensity(weather, sky), 0.62 / Math.max(120, gfx.drawDistance));
+  return Math.max(weatherFogDensity(weather, sky), 0.62 / VIEW_ALL);
 }
 
 /** Nebbia lineare leggera (fogEffects = false): mai nulla. */
 export function fogLinear(weather: WeatherState, sky: SkyState, gfx: GraphicsSettings): { start: number; end: number } {
   const vis = 1.6 / weatherFogDensity(weather, sky);
-  const end = Math.max(60, Math.min(gfx.drawDistance * 1.05, vis));
+  const end = Math.max(60, Math.min(VIEW_ALL, vis));
   return { start: end * 0.3, end };
 }
 
@@ -191,11 +191,13 @@ export interface QualityParams {
   shadowMap: number; shadowRange: number; lodInterval: number;
 }
 export function qualityParams(q: GraphicsSettings['quality']): QualityParams {
-  if (q === 'low') return { nearDist: 60, rockDist: 120, coverRadius: 12, coverCell: 2.2, rain: 1400, snow: 900, debris: 60, motes: 80, shadowMap: 1024, shadowRange: 60, lodInterval: 0.4 };
-  if (q === 'high') return { nearDist: 135, rockDist: 260, coverRadius: 26, coverCell: 1.5, rain: 6000, snow: 4000, debris: 220, motes: 260, shadowMap: 2048, shadowRange: 90, lodInterval: 0.2 };
-  return { nearDist: 95, rockDist: 190, coverRadius: 19, coverCell: 1.8, rain: 3500, snow: 2400, debris: 140, motes: 160, shadowMap: 2048, shadowRange: 75, lodInterval: 0.25 };
+  if (q === 'low') return { nearDist: 60, rockDist: 260, coverRadius: 12, coverCell: 2.2, rain: 1400, snow: 900, debris: 60, motes: 80, shadowMap: 1024, shadowRange: 60, lodInterval: 0.4 };
+  if (q === 'high') return { nearDist: 135, rockDist: 520, coverRadius: 26, coverCell: 1.5, rain: 6000, snow: 4000, debris: 220, motes: 260, shadowMap: 2048, shadowRange: 90, lodInterval: 0.2 };
+  return { nearDist: 95, rockDist: 380, coverRadius: 19, coverCell: 1.8, rain: 3500, snow: 2400, debris: 140, motes: 160, shadowMap: 2048, shadowRange: 75, lodInterval: 0.25 };
 }
 
+/** Tutto il mondo resta disegnato: nessun oggetto compare o scompare con la distanza (solo il dettaglio cambia). */
+export const VIEW_ALL = 2400;
 export const CHUNK_SIZE = 100;
 export const CHUNK_MIN = -800;
 export const CHUNK_N = 16;

@@ -71,6 +71,8 @@ export const IT_ANIMALS: Record<AnimalKey, ItNoun> = {
   raccoon: n('procione', 'procioni', 'm'),
   owl: n('gufo', 'gufi', 'm'),
   crows: n('corvo', 'corvi', 'm', true),
+  rabbit: n('coniglio', 'conigli', 'm'),
+  nightbird: n('uccello notturno', 'uccelli notturni', 'm'),
 };
 
 const LOW_NOUNS: Partial<Record<SubjectKey, ItNoun>> = {
@@ -170,6 +172,8 @@ const SOUND: Record<SoundKey, SoundPhrase> = {
   car_door: { t: 'il rumore di una portiera', g: 'm' },
   vehicle_start: { t: "l'avviamento di un motore", g: 'm' },
   frog: { t: 'il gracidare di una rana', g: 'm' },
+  screech: { t: 'uno strido lungo e rauco', g: 'm' },
+  nightbird: { t: 'il verso di un uccello che non riconosco', g: 'm' },
 };
 
 const COLOR: Record<ColorKey, string> = {

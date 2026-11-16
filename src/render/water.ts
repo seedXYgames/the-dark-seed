@@ -10,6 +10,7 @@ import { lakeRadiusAt, polyLens } from '../world/terrain';
 import type { WorldModel } from '../world/model';
 import { mix, type RGB, type SkyPalette } from './envMath';
 import { set3, u3, u4 } from './sky';
+import { TORCH_PROFILE_GLSL, TORCH_COLOR } from '../core/torch';
 
 Effect.ShadersStore['tdsWaterVertexShader'] = `
 precision highp float;
@@ -24,6 +25,7 @@ varying vec3 vPos;varying float vDepth;
 uniform vec3 uCam,uZenith,uHorizon,uFog,uMoonDir,uMoonCol,uTorchPos,uTorchDir;
 uniform vec4 uP; // time, reflectionShift, torch, strip
 uniform vec4 uF; // fogMode, density, start, end
+${TORCH_PROFILE_GLSL}
 float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
   return mix(mix(h21(i),h21(i+vec2(1.,0.)),f.x),mix(h21(i+vec2(0.,1.)),h21(i+vec2(1.,1.)),f.x),f.y);}
@@ -50,8 +52,8 @@ void main(void){
   }
   col+=uMoonCol*sp;
   vec3 L=vPos-uTorchPos;float d=length(L);L/=d;
-  float cone=smoothstep(0.80,0.96,dot(L,uTorchDir))*max(0.0,1.0-d/45.0);
-  col+=uP.z*cone*vec3(1.0,0.93,0.8)*(0.035+0.9*pow(max(dot(R,-L),0.0),50.0));
+  float cone=tdsTorchMask(vPos-uTorchPos,uTorchDir)*max(0.0,1.0-d/45.0);
+  col+=uP.z*cone*vec3(${TORCH_COLOR.map(c => c.toFixed(3)).join(',')})*(0.035+0.9*pow(max(dot(R,-L),0.0),50.0));
   float fog=uF.x<0.5?1.0-exp(-pow(dist*uF.y,2.0)):clamp((dist-uF.z)/(uF.w-uF.z),0.0,1.0);
   col=mix(col,uFog,fog);
   col=mix(col,vec3(1.0),uP.w);

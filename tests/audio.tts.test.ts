@@ -118,3 +118,20 @@ describe('Tts', () => {
     expect(broken.status().supported).toBe(true);
   });
 });
+
+import { voiceGender } from '../src/audio/tts';
+describe('voce maschile del narratore', () => {
+  const v = (name: string, lang: string, localService = true, def = false) => ({ name, lang, localService, default: def });
+  it('preferisce una voce maschile, e fra quelle maschili la più naturale', () => {
+    const it_ = [v('Alice', 'it-IT', true, true), v('Federica', 'it-IT'), v('Luca', 'it-IT'), v('Luca (Premium)', 'it-IT'), v('Google italiano', 'it-IT', false)];
+    expect(chooseVoice(it_, 'it')!.name).toBe('Luca (Premium)');
+    const en = [v('Samantha', 'en-US', true, true), v('Microsoft Guy Online (Natural) - English (United States)', 'en-US', false), v('Daniel', 'en-GB')];
+    expect(chooseVoice(en, 'en')!.name).toContain('Guy');
+    expect(chooseVoice([v('Google UK English Female', 'en-GB'), v('Google UK English Male', 'en-GB')], 'en')!.name).toBe('Google UK English Male');
+  });
+  it('usa una voce femminile solo se non ce ne sono altre', () => {
+    expect(chooseVoice([v('Alice', 'it-IT')], 'it')!.name).toBe('Alice');
+    expect(voiceGender('Microsoft Diego Online (Natural) - Italian (Italy)')).toBe('male');
+    expect(voiceGender('Microsoft Elsa - Italian (Italy)')).toBe('female');
+  });
+});

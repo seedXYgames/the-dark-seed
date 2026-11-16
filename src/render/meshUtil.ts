@@ -226,7 +226,7 @@ export class Mats {
   private stripNow = 0;
   readonly vc: StandardMaterial; readonly vc2: StandardMaterial; readonly black: StandardMaterial;
   readonly bulbOn: StandardMaterial; readonly bulbOff: StandardMaterial; readonly winLit: StandardMaterial; readonly winDark: StandardMaterial;
-  readonly headOn: StandardMaterial; readonly amberOn: StandardMaterial; readonly redOn: StandardMaterial; readonly greenOn: StandardMaterial;
+  readonly headOn: StandardMaterial; readonly amberOn: StandardMaterial; readonly redOn: StandardMaterial; readonly blueOn: StandardMaterial; readonly greenOn: StandardMaterial;
   readonly ember: StandardMaterial; readonly flame: StandardMaterial; readonly faint: StandardMaterial; readonly eye: StandardMaterial;
 
   constructor(readonly scene: Scene) {
@@ -240,6 +240,7 @@ export class Mats {
     this.headOn = this.make('obj.headOn', 0xffffff, 0xf4f1dc, { unlit: true });
     this.amberOn = this.make('obj.amberOn', 0xffa020, 0xff9a1c, { unlit: true });
     this.redOn = this.make('obj.redOn', 0xff2010, 0xd81a10, { unlit: true });
+    this.blueOn = this.make('obj.blueOn', 0x315dff, 0x2049e0, { unlit: true });
     this.greenOn = this.make('obj.greenOn', 0x40ff60, 0x35d455, { unlit: true });
     this.ember = this.make('obj.ember', 0x3a0c04, 0xa3260a);
     this.flame = this.make('obj.flame', 0xff8a20, 0xff9a30, { unlit: true, alpha: 0.85 });
@@ -286,8 +287,8 @@ export class Mats {
   }
 }
 
-export type GlowKind = 'warm' | 'amber' | 'red' | 'white' | 'fire';
-const GLOW_TINT: Record<GlowKind, number> = { warm: 0xffb060, amber: 0xff9020, red: 0xc02810, white: 0xe8ecff, fire: 0xff7a22 };
+export type GlowKind = 'warm' | 'amber' | 'red' | 'blue' | 'white' | 'fire';
+const GLOW_TINT: Record<GlowKind, number> = { warm: 0xffb060, amber: 0xff9020, red: 0xc02810, blue: 0x315dff, white: 0xe8ecff, fire: 0xff7a22 };
 /** Aloni additivi a billboard (istanze: una draw call per colore). */
 export class GlowPool {
   private src = new Map<GlowKind, Mesh>();
