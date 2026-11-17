@@ -44,8 +44,6 @@ export interface Progress {
   seeds: number[];
   /** Quante volte è stato giocato ciascun seed (solo i più recenti). */
   seedPlays: Record<string, number>;
-  /** Nome scelto dal giocatore per il profilo. */
-  name: string;
   /** Totali di tutti i turni. */
   totals: Totals;
   /** Ultimi seed giocati, dal più recente. */
@@ -99,7 +97,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 const KEY = 'tds.progress.v1';
 
 export function emptyProgress(): Progress {
-  return { version: 1, unlocked: {}, shifts: 0, completed: 0, seeds: [], seedPlays: {}, name: '', totals: emptyTotals(), recent: [] };
+  return { version: 1, unlocked: {}, shifts: 0, completed: 0, seeds: [], seedPlays: {}, totals: emptyTotals(), recent: [] };
 }
 
 export function loadProgress(storage: Pick<Storage, 'getItem'> | null = safeStorage()): Progress {
@@ -114,11 +112,16 @@ export function loadProgress(storage: Pick<Storage, 'getItem'> | null = safeStor
       shifts: Number(p.shifts) || 0, completed: Number(p.completed) || 0,
       seeds: Array.isArray(p.seeds) ? p.seeds.filter((s) => Number.isFinite(s)).slice(-500) : [],
       seedPlays: p.seedPlays && typeof p.seedPlays === 'object' ? p.seedPlays : {},
-      name: typeof p.name === 'string' ? p.name.slice(0, 24) : '',
       totals: { ...emptyTotals(), ...(p.totals && typeof p.totals === 'object' ? p.totals : {}) },
       recent: Array.isArray(p.recent) ? p.recent.filter((s) => Number.isFinite(s)).slice(0, 12) : [],
     };
   } catch { return emptyProgress(); }
+}
+
+/** Grado in base ai turni completati: indice 0..4 (recluta → veterano). */
+export function rankOf(p: Progress): number {
+  const c = p.completed;
+  return c >= 25 ? 4 : c >= 10 ? 3 : c >= 3 ? 2 : c >= 1 ? 1 : 0;
 }
 
 /** Il seed giocato più volte (a parità, il più recente). */

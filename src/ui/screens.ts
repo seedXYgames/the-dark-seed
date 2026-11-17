@@ -1,7 +1,8 @@
 // Schermate a tutto schermo (caricamento, menu, impostazioni, introduzione, pausa, riepilogo)
 // e piccoli strumenti DOM condivisi dall'interfaccia. Nessun accesso al DOM a livello di modulo.
 import type { ScreenId, SummaryView, UiCallbacks } from '../core/api';
-import { ACHIEVEMENTS, favouriteSeed, loadProgress, saveProgress } from '../game/achievements';
+import { ACHIEVEMENTS, favouriteSeed, loadProgress, rankOf } from '../game/achievements';
+import { currentAccount } from '../game/account';
 import type { GraphicsSettings, Lang, Settings } from '../core/contracts';
 import { parseSeed, randomSeed, seedFromUrl } from '../core/seed';
 import { GAME_TITLE, t } from '../i18n/strings';
@@ -607,14 +608,13 @@ export class Screens {
   private buildAchievements(): HTMLElement {
     const p = el('section', 'tds-screen tds-achievements');
     const panel = el('div', 'tds-panel tds-profile');
-    panel.appendChild(i18n(el('h2', 'tds-h2'), 'profile.title'));
-    this.achBody = el('div', 'tds-ach-body');
-    const back = i18n(el('button', 'tds-btn tds-btn-quiet tds-profile-back'), 'settings.back');
+    const back = i18n(el('button', 'tds-btn tds-btn-quiet tds-profile-back'), 'profile.back');
     back.type = 'button';
     back.dataset.nav = '';
     back.dataset.autofocus = '';
     back.addEventListener('click', () => this.host.go('menu'));
-    panel.append(this.achBody, back);
+    this.achBody = el('div', 'tds-ach-body');
+    panel.append(back, i18n(el('h2', 'tds-h2'), 'profile.title'), this.achBody);
     p.appendChild(panel);
     return p;
   }
@@ -622,57 +622,76 @@ export class Screens {
   private renderAchievements(): void {
     const lang = this.host.lang();
     const prog = loadProgress();
+    const account = currentAccount();
     const body = this.achBody;
     body.textContent = '';
     const got = ACHIEVEMENTS.filter((a) => prog.unlocked[a.id]).length;
+    const pct = Math.round((got / ACHIEVEMENTS.length) * 100);
 
-    // nome del giocatore (salvato nel browser)
-    const nameRow = el('div', 'tds-profile-name');
-    const nameId = this.uid('profile-name');
-    const nameLabel = el('label', 'tds-profile-label', t(lang, 'profile.name'));
-    nameLabel.htmlFor = nameId;
-    const name = el('input', 'tds-profile-input');
-    name.id = nameId; name.type = 'text'; name.maxLength = 24; name.autocomplete = 'off'; name.spellcheck = false;
-    name.placeholder = t(lang, 'profile.namePlaceholder');
-    name.value = prog.name;
-    name.dataset.nav = '';
-    const saveName = () => { const p2 = loadProgress(); p2.name = name.value.trim().slice(0, 24); saveProgress(p2); };
-    name.addEventListener('change', saveName);
-    name.addEventListener('blur', saveName);
-    name.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') name.blur(); });
-    nameRow.append(nameLabel, name);
-    body.appendChild(nameRow);
+    // intestazione: chi sei e a che punto sei
+    const head = el('div', 'tds-profile-head');
+    const who = el('div', 'tds-profile-who');
+    who.append(
+      el('div', 'tds-profile-avatar', account.name.slice(0, 1).toUpperCase()),
+      el('div', 'tds-profile-id'),
+    );
+    const id = who.lastElementChild as HTMLElement;
+    id.append(
+      el('div', 'tds-profile-username', account.name),
+      el('div', 'tds-profile-rank', t(lang, `profile.rank.${rankOf(prog)}`)),
+      el('div', 'tds-profile-note', t(lang, 'profile.localNote')),
+    );
+    const done = el('div', 'tds-profile-progress');
+    done.append(
+      el('div', 'tds-profile-big', String(got)),
+      el('div', 'tds-profile-caption', t(lang, 'profile.stat.achievements')),
+    );
+    const big = done.firstElementChild as HTMLElement;
+    big.appendChild(el('small', undefined, ` / ${ACHIEVEMENTS.length}`));
+    const bar = el('div', 'tds-profile-bar');
+    const fill = el('i');
+    fill.style.width = `${pct}%`;
+    bar.appendChild(fill);
+    done.appendChild(bar);
+    head.append(who, done);
+    body.appendChild(head);
 
-    // statistiche
+    // statistiche in due gruppi
     const tt = prog.totals;
     const hours = Math.floor(tt.seconds / 3600), mins = Math.round((tt.seconds % 3600) / 60);
     const fav = favouriteSeed(prog);
-    const stats: [string, string][] = [
-      ['profile.stat.achievements', `${got} / ${ACHIEVEMENTS.length}`],
-      ['profile.stat.shifts', String(prog.shifts)],
-      ['profile.stat.completed', String(prog.completed)],
-      ['profile.stat.seeds', String(prog.seeds.length)],
-      ['profile.stat.time', hours ? `${hours} h ${mins} min` : `${mins} min`],
-      ['profile.stat.longest', formatDuration(tt.longest)],
-      ['profile.stat.distance', `${(tt.meters / 1000).toFixed(1)} km`],
-      ['profile.stat.reports', String(tt.reports)],
-      ['profile.stat.photos', String(tt.photos)],
-      ['profile.stat.clues', String(tt.clues)],
-      ['profile.stat.radio', String(tt.radio)],
-      ['profile.stat.deaths', String(tt.deaths)],
+    const groups: [string, [string, string][]][] = [
+      ['profile.career', [
+        ['profile.stat.shifts', String(prog.shifts)],
+        ['profile.stat.completed', String(prog.completed)],
+        ['profile.stat.seeds', String(prog.seeds.length)],
+        ['profile.stat.favourite', fav === null ? '–' : String(fav)],
+        ['profile.stat.time', hours ? `${hours} h ${mins} min` : `${mins} min`],
+        ['profile.stat.longest', tt.longest ? formatDuration(tt.longest) : '–'],
+      ]],
+      ['profile.field', [
+        ['profile.stat.distance', `${(tt.meters / 1000).toFixed(1)} km`],
+        ['profile.stat.reports', String(tt.reports)],
+        ['profile.stat.photos', String(tt.photos)],
+        ['profile.stat.clues', String(tt.clues)],
+        ['profile.stat.radio', String(tt.radio)],
+        ['profile.stat.deaths', String(tt.deaths)],
+      ]],
     ];
-    const grid = el('dl', 'tds-profile-stats');
-    for (const [k, v] of stats) { const d = el('div', 'tds-profile-stat'); d.append(el('dd', undefined, v), el('dt', undefined, t(lang, k))); grid.appendChild(d); }
-    body.appendChild(grid);
-    const bar = el('div', 'tds-profile-bar');
-    const fill = el('i');
-    fill.style.width = `${Math.round((got / ACHIEVEMENTS.length) * 100)}%`;
-    bar.appendChild(fill);
-    body.appendChild(bar);
+    const cols = el('div', 'tds-profile-cols');
+    for (const [title, rows] of groups) {
+      const card = el('div', 'tds-profile-card');
+      card.appendChild(el('h3', 'tds-h3', t(lang, title)));
+      const dl = el('dl', 'tds-profile-rows');
+      for (const [k, v] of rows) { const r = el('div', 'tds-profile-row'); r.append(el('dt', undefined, t(lang, k)), el('dd', undefined, v)); dl.appendChild(r); }
+      card.appendChild(dl);
+      cols.appendChild(card);
+    }
+    body.appendChild(cols);
 
     // seed recenti: un clic li gioca di nuovo
+    body.appendChild(el('h3', 'tds-h3', t(lang, 'profile.recent')));
     if (prog.recent.length) {
-      body.appendChild(el('h3', 'tds-h3', t(lang, 'profile.recent')));
       const chips = el('div', 'tds-profile-seeds');
       for (const sd of prog.recent) {
         const b = el('button', `tds-seed-chip${sd === fav ? ' is-fav' : ''}`, String(sd));
@@ -682,21 +701,27 @@ export class Screens {
         chips.appendChild(b);
       }
       body.appendChild(chips);
-    }
+    } else body.appendChild(el('p', 'tds-muted tds-profile-empty', t(lang, 'profile.noSeeds')));
 
-    // obiettivi: prima quelli sbloccati
-    body.appendChild(el('h3', 'tds-h3', t(lang, 'profile.achievements', { n: got, total: ACHIEVEMENTS.length })));
-    const list = el('ul', 'tds-ach-list tds-ach-grid');
-    const sorted = [...ACHIEVEMENTS].sort((a, b) => Number(!!prog.unlocked[b.id]) - Number(!!prog.unlocked[a.id]));
-    for (const a of sorted) {
-      const u = prog.unlocked[a.id];
-      const li = el('li', `tds-ach${u ? ' is-unlocked' : ''}`);
-      const hidden = !u && a.secret;
-      li.append(el('span', 'tds-ach-name', hidden ? '???' : a.name[lang]), el('span', 'tds-ach-desc', hidden ? t(lang, 'achievements.secret') : a.desc[lang]));
-      if (u) li.appendChild(el('span', 'tds-ach-seed', t(lang, 'achievements.seed', { seed: u.seed })));
-      list.appendChild(li);
-    }
-    body.appendChild(list);
+    // obiettivi: sbloccati, poi da sbloccare
+    const unlocked = ACHIEVEMENTS.filter((a) => prog.unlocked[a.id]);
+    const locked = ACHIEVEMENTS.filter((a) => !prog.unlocked[a.id]);
+    const section = (key: string, defs: typeof ACHIEVEMENTS) => {
+      body.appendChild(el('h3', 'tds-h3', t(lang, key, { n: defs.length })));
+      if (!defs.length) { body.appendChild(el('p', 'tds-muted tds-profile-empty', t(lang, 'profile.noneYet'))); return; }
+      const list = el('ul', 'tds-ach-list tds-ach-grid');
+      for (const a of defs) {
+        const u = prog.unlocked[a.id];
+        const li = el('li', `tds-ach${u ? ' is-unlocked' : ''}`);
+        const hidden = !u && a.secret;
+        li.append(el('span', 'tds-ach-name', hidden ? '???' : a.name[lang]), el('span', 'tds-ach-desc', hidden ? t(lang, 'achievements.secret') : a.desc[lang]));
+        if (u) li.appendChild(el('span', 'tds-ach-seed', t(lang, 'achievements.seed', { seed: u.seed })));
+        list.appendChild(li);
+      }
+      body.appendChild(list);
+    };
+    section('profile.unlocked', unlocked);
+    section('profile.locked', locked);
   }
 
   // ------------------------------------------------------------ riepilogo

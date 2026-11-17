@@ -94,11 +94,12 @@ in alto a destra.
 
 ## Profilo e obiettivi
 
-Dal menu, **Profilo** mostra il tuo nome in servizio, le statistiche (turni iniziati e completati, seed
-diversi, tempo in servizio, turno più lungo, chilometri a piedi, rapporti, foto, indizi, chiamate risposte,
-turni finiti male), gli ultimi seed giocati (un clic per rigiocarli) e i **34 obiettivi**, alcuni segreti.
-Tutto è salvato nel browser: non serve un account, ma cambiando browser o cancellando i dati del sito
-si riparte da zero.
+Dal menu, **Profilo** mostra il nome dell'account (per ora fisso, «Test») e il grado, che sale con i turni
+completati. Sotto ci sono le statistiche divise fra *Carriera* (turni iniziati e completati, seed diversi,
+seed preferito, tempo in servizio, turno più lungo) e *Sul campo* (chilometri a piedi, rapporti, foto, indizi,
+chiamate risposte, turni finiti male). Seguono gli ultimi seed giocati (un clic per rigiocarli) e i
+**34 obiettivi**, divisi fra sbloccati e da sbloccare; alcuni sono segreti. Finché non arriva l'account,
+tutto è salvato nel browser: cambiando browser o cancellando i dati del sito si riparte da zero.
 
 ![Profilo](docs/screenshots/game-12-profile.png)
 

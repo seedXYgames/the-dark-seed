@@ -33,7 +33,7 @@ export const WALK_SPEED = 2.5;
 export const RUN_SPEED = 5.8;
 export const EYE_HEIGHT = 1.68;
 export const INTERACT_RANGE = 3.2;
-const TORCH_LIFE = 900; // secondi di luce con batteria piena
+const TORCH_LIFE = 1500; // secondi di luce con batteria piena
 
 export interface PlayerInput { forward: number; strafe: number; run: boolean; yaw: number; pitch: number }
 
@@ -115,7 +115,7 @@ export class GameSession implements SimHost {
     this.state = {
       seed: opts.seed, generatorVersion: GENERATOR_VERSION, lang: opts.lang, time: 0, tick: 0,
       player: { pos: { ...spec.playerSpawn.pos }, y: model.groundAt(spec.playerSpawn.pos.x, spec.playerSpawn.pos.z), yaw: spec.playerSpawn.yaw + Math.PI, pitch: 0, running: false, indoors: false },
-      torch: { on: false, charge: tr.range(0.22, 1), spares: 0, fault: 0, flicker: 0 },
+      torch: { on: false, charge: tr.range(0.6, 1), spares: 0, fault: 0, flicker: 0 },
       body: newBody(streamFor(opts.seed, 'encounters').fork('phone').range(0.5, 0.95)),
       missions, observations: [], photos: [], messages: [], reports: [], objects, objectPos: {}, dynamicObjects: [], actors: [], log: [],
       mysteries: spec.mysteries.map((m) => ({ ...m, clues: m.clues.map((c) => ({ ...c })), timeline: m.timeline.map((t) => ({ ...t })), discovered: [] })),
@@ -500,7 +500,9 @@ export class GameSession implements SimHost {
     if (t.fault > 0) t.fault = Math.max(0, t.fault - SIM_DT);
     const inter = this.sim.interference().torch;
     const ordinary = t.fault > 0 ? 0.35 + 0.65 * hash2(this.state.tick, 3, 91) : 0;
-    const anomalous = inter > 0.05 ? inter * (0.4 + 0.6 * hash2(this.state.tick, 5, 17)) : 0;
+    // un'interferenza fa sfarfallare la torcia a scatti, non la tiene abbassata: fra un buco e l'altro il fascio resta pieno
+    const slot = Math.floor(this.state.time * 7);
+    const anomalous = inter > 0.05 && hash2(slot, 5, 17) < 0.15 + 0.35 * inter ? Math.min(0.85, inter * (0.5 + 0.5 * hash2(slot, 7, 23))) : 0;
     t.flicker = clamp(Math.max(ordinary, anomalous), 0, 1);
   }
 
@@ -756,7 +758,7 @@ export class GameSession implements SimHost {
   torchRender(phoneOpen = false): TorchRender {
     const t = this.state.torch;
     let intensity = 0;
-    if (t.on && t.charge > 0) intensity = (t.charge > 0.12 ? 1 : 0.35 + (t.charge / 0.12) * 0.65) * (1 - t.flicker);
+    if (t.on && t.charge > 0) intensity = (t.charge > 0.08 ? 1 : 0.6 + (t.charge / 0.08) * 0.4) * (1 - t.flicker);
     return { on: t.on, intensity, phoneGlow: phoneOpen ? 0.8 : intensity < 0.05 ? 0.45 : 0 };
   }
 
