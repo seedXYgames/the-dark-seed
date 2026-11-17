@@ -39,7 +39,7 @@ Un seed si può passare anche nell'indirizzo: `…/?seed=4242`.
 
 Ricevi incarichi sul telefono, vai sul posto, guardi, fotografi e mandi il rapporto. La volante parte con i
 fari accesi; tornarci serve a scaldarsi e a ricaricare il telefono. I messaggi nuovi compaiono **in alto a
-sinistra**, l'indicatore delle stranezze resta in alto a destra.
+sinistra**, gli altri avvisi in alto a destra.
 
 ![Torcia nel bosco](docs/screenshots/game-03-night-torch-cabin.png)
 ![Rapporto dal telefono](docs/screenshots/game-04-phone-report.png)
@@ -57,13 +57,12 @@ Nessuno di questi uccide: rallentano e complicano il turno.
 ### La radio
 
 La centrale chiama durante il turno: controlli di routine, segnalazioni su un posto preciso, avvisi meteo.
-Hai una ventina di secondi per rispondere con **R**. A volte, dopo, la centrale giura di non averti mai chiamato.
+Hai una ventina di secondi per rispondere con **R**.
 
 ### Il bosco racconta
 
-Ogni turno nasconde un mistero (un escursionista in ritardo, un bracconiere, un cervo malato, luci sul
-crinale, qualcuno che bussa di notte…). Gli indizi stanno nei luoghi e spesso dentro le case aperte. A fine
-turno quelli trovati si ricompongono in un racconto: pochi indizi danno un'ipotesi, tutti la storia completa.
+Ogni turno nasconde una storia. Chi guarda bene trova indizi, e a fine turno quelli raccolti si
+ricompongono in un racconto: pochi danno un'ipotesi, tutti la storia completa.
 
 ### Luoghi
 
@@ -80,17 +79,9 @@ distributori e borghi ci sono:
 ![Segheria](docs/screenshots/place-sawmill.png)
 ![Stazione meteo nella neve](docs/screenshots/place-weather-station.png)
 
-### Incontri
+### Di notte
 
-Alcuni seed ospitano Bigfoot, un gruppo di alieni o una setta intenta a un rito. Correre e tenere la torcia
-accesa facilita l'individuazione. Bigfoot e la setta possono ucciderti se ti raggiungono; gli alieni sono
-innocui e fuggono dopo 2–3,5 minuti dal primo inseguimento. Dopo una morte puoi riprovare lo stesso turno.
-
-Un piccolo uomo col cappello può osservarti da lontano e seguirti per tutto il turno, senza attaccare.
-Quando ti osserva, o percepisci una stranezza, entra una musica misteriosa e lampeggia un indicatore
-in alto a destra.
-
-![Incontro](docs/screenshots/encounter-ufo.png)
+Nel bosco non sei sempre solo. Cosa ci sia, dipende dal seed: scoprirlo è parte del gioco.
 
 ## Profilo e obiettivi
 
@@ -98,29 +89,17 @@ Dal menu, **Profilo** mostra il nome dell'account (per ora fisso, «Test») e il
 completati. Sotto ci sono le statistiche divise fra *Carriera* (turni iniziati e completati, seed diversi,
 seed preferito, tempo in servizio, turno più lungo) e *Sul campo* (chilometri a piedi, rapporti, foto, indizi,
 chiamate risposte, turni finiti male). Seguono gli ultimi seed giocati (un clic per rigiocarli) e i
-**34 obiettivi**, divisi fra sbloccati e da sbloccare; alcuni sono segreti. Finché non arriva l'account,
+**34 obiettivi**, divisi fra sbloccati e da sbloccare. Finché non arriva l'account,
 tutto è salvato nel browser: cambiando browser o cancellando i dati del sito si riparte da zero.
 
 ![Profilo](docs/screenshots/game-12-profile.png)
 
 ## Seed di prova
 
-Posizioni iniziali, poi gli attori si muovono.
-
-| Seed | Incontro | Dove cercare |
-| --- | --- | --- |
-| 14 | Bigfoot | circa 50 m a nord-est dei Servizi del Gufo |
-| 7 | 3 membri della setta | circa 90 m a nord-est del Molo della Resina |
-| 13 | 4 alieni grigi, tende e apparecchiatura | circa 90 m a est del Distributore della Brina |
-| 78 | 2 alieni verdi, UFO precipitato | circa 60 m a nord-ovest della Stazione di servizio della Resina |
+Per vedere i luoghi senza cercarli a lungo:
 
 | Cosa | Seed |
 | --- | --- |
-| Osservatore | 0, 8, 16 |
-| Altri Bigfoot | 14, 22, 34 |
-| Altre sette | 7, 12, 38 |
-| Altri alieni | 13, 21, 26 |
-| UFO precipitato | 21, 40, 78 |
 | Borgo | 1, 3, 4 |
 | Chiesa | 1, 3, 5 |
 | Segheria | 1, 5, 8 |
@@ -133,7 +112,7 @@ Posizioni iniziali, poi gli attori si muovono.
 | --- | --- |
 | `npm run typecheck` | controllo dei tipi |
 | `npm test` | 181 test automatici (logica, narrativa, audio, UI, simulazione, corpo, radio, obiettivi, accettazione) |
-| `npm run harness -- 40 1000 --extreme` | gioca 40 turni completi senza grafica e conta i seed predisposti all'evento estremo |
+| `npm run harness -- 40 1000` | gioca 40 turni completi senza grafica |
 | `npm run audit:static` | cerca chiamate di rete, endpoint AI, credenziali e casualità non deterministica |
 
 Documentazione: `docs/ARCHITECTURE.md`, `docs/CONTRACTS.md`, `docs/ACCEPTANCE_MATRIX.md`, `docs/QA_REPORT.md`,
