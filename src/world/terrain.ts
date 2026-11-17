@@ -62,8 +62,8 @@ export function rawHeight(t: TerrainSpec, x: number, z: number): number {
   h += (valueNoise2(x / 23, z / 23, s + 313) - 0.5) * 0.9;
   // rilievo di confine: pendii impraticabili attorno all'area giocabile
   const m = Math.max(Math.abs(x), Math.abs(z));
-  if (m > 640) {
-    let rise = m <= 700 ? ((m - 640) / 60) ** 2 * 30 : 30 + (m - 700) * 1.05;
+  if (m > WORLD_HALF - 60) {
+    let rise = m <= WORLD_HALF ? ((m - (WORLD_HALF - 60)) / 60) ** 2 * 30 : 30 + (m - WORLD_HALF) * 1.05;
     rise *= 0.8 + 0.45 * valueNoise2(x / 90, z / 90, s + 71);
     const road = distToSegment(x, z, t.entryRoad.from, t.entryRoad.to);
     rise *= smoothstep(9, 48, road);
@@ -171,6 +171,6 @@ export function forestField(t: TerrainSpec, x: number, z: number): number {
   const b = valueNoise2(x / 60, z / 60, t.forestSalt + 19);
   const v = a * 0.8 + b * 0.2 + t.forestBias;
   const m = Math.max(Math.abs(x), Math.abs(z));
-  const rim = smoothstep(610, 680, m); // vegetazione fitta ai bordi
+  const rim = smoothstep(WORLD_HALF - 90, WORLD_HALF - 20, m); // vegetazione fitta ai bordi
   return clamp(smoothstep(0.38, 0.62, v) * (1 - rim) + rim, 0, 1);
 }

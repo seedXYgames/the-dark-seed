@@ -106,8 +106,8 @@ export class WorldModel implements IWorldModel {
     }
     for (const p of spec.pois) {
       if (p.type !== 'lake_dock') continue;
-      const c = toWorld(0, 14, p.pos.x, p.pos.z, p.rotY);
-      this.platforms.push({ id: p.id + '.pier', cx: c.x, cz: c.z, hx: 1.2, hz: 10, rot: p.rotY, y: p.baseHeight + 0.35, kind: 'pier' });
+      const L = p.pier ?? 20, c = toWorld(0, 4 + L / 2, p.pos.x, p.pos.z, p.rotY);
+      this.platforms.push({ id: p.id + '.pier', cx: c.x, cz: c.z, hx: 1.2, hz: L / 2, rot: p.rotY, y: p.baseHeight + 0.35, kind: 'pier' });
     }
     // sentieri
     this.pathMask = new Uint8Array(MASK_N * MASK_N);
@@ -251,6 +251,19 @@ export class WorldModel implements IWorldModel {
     const p = this.platformAt(x, z);
     const h = this.heightAt(x, z);
     return p ? Math.max(p.y, p.kind === 'floor' ? p.y : h) : h;
+  }
+  /** Vero dentro un edificio, a ridosso dei muri o nello spiazzo davanti alla porta (niente vegetazione). */
+  nearBuildingAt(x: number, z: number, margin = 1.2, doorApron = 3.5): boolean {
+    for (const b of this.spec.buildings) {
+      const dx = x - b.pos.x, dz = z - b.pos.z;
+      if (Math.abs(dx) > b.w + b.d + doorApron || Math.abs(dz) > b.w + b.d + doorApron) continue;
+      const c = Math.cos(b.rotY), sn = Math.sin(b.rotY);
+      const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+      if (Math.abs(lx) < b.w / 2 + margin && Math.abs(lz) < b.d / 2 + margin) return true;
+      // davanti all'ingresso (+z locale): uno spiazzo libero largo quanto la soglia
+      if (lz > 0 && lz < b.d / 2 + doorApron && Math.abs(lx - b.doorOffset) < 1.6) return true;
+    }
+    return false;
   }
   indoorsAt(x: number, z: number): boolean {
     const p = this.platformAt(x, z);

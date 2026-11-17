@@ -5,18 +5,20 @@ import type { ActorView, ExtremeRenderState, Facts, LocalAlterations, Spontaneou
 import type {
   ActorKind, ActorState, AnomalyCapability, CapabilityId, ObjectKind, RoutineStep, Vec2, WorldEvent, WorldObjectSpec,
 } from '../core/contracts';
+import { WORLD_HALF } from '../core/contracts';
 import { clamp, smoothstep, type Rng } from '../core/rng';
 import { EXTREME_IDLE, extremeAudioAt, extremeStateAt, makeExtremePlan } from './extreme';
 import type { ISimulation, SimFactory, SimHost } from './host';
 import { isLampLit } from './objects';
 import { Encounters } from './encounters';
 import { Watcher } from './watcher';
+import { DREAD_HUSH, DreadDirector } from './dread';
 import { MysteryMoodDirector } from './mysteryMood';
 
 const DIRS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
 const bearing = (from: Vec2, to: Vec2) => DIRS[((Math.round(Math.atan2(to.x - from.x, to.z - from.z) / (Math.PI / 4)) % 8) + 8) % 8];
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
-const LIMIT = 680;
+const LIMIT = WORLD_HALF - 20;
 const ANOM_COLORS: [number, number, number][] = [[1, 0.86, 0.62], [0.62, 0.8, 1], [0.72, 1, 0.82], [1, 0.52, 0.42], [0.92, 0.92, 1]];
 const ALTER_PROPS: NonNullable<AnomalyCapability['property']>[] = ['rain_up', 'shadow_skew', 'reflection_shift', 'audio_displace', 'dust_float', 'compass_spin'];
 const DRIFT_KINDS: ObjectKind[] = ['chair', 'sign', 'door', 'lamp', 'lamp_post', 'cooler'];
@@ -27,6 +29,7 @@ interface PlannedSms { t: number; kind: SpontaneousKind; done?: boolean }
 export class Simulation implements ISimulation {
   private readonly encounters: Encounters;
   private readonly watcher: Watcher;
+  private readonly dread: DreadDirector;
   private readonly mood: MysteryMoodDirector;
   private readonly st;
   private readonly model;
@@ -61,6 +64,7 @@ export class Simulation implements ISimulation {
     this.spawnNpcs(); this.spawnFauna(); this.spawnAnomalies(); this.spawnIllusions(); this.planSms();
     this.encounters = new Encounters(h);
     this.watcher = new Watcher(h);
+    this.dread = new DreadDirector(h);
     this.mood = new MysteryMoodDirector(h);
     if (this.st.extreme.predisposed && !this.st.extreme.plan) this.st.extreme.plan = makeExtremePlan(this.st.seed);
     const w = h.weather();
@@ -141,9 +145,9 @@ export class Simulation implements ISimulation {
     const r = this.rFauna, centre = { x: 0, z: 0 }, spawn = this.spec.playerSpawn.pos;
     const far = (p: Vec2 | null) => (p && dist(p, spawn) > 70 ? p : null);
     let n = 0;
-    const herd = far(this.spot(r, centre, 80, 620, true));
+    const herd = far(this.spot(r, centre, 80, WORLD_HALF - 80, true));
     if (herd) for (let i = r.int(2, 4); i > 0; i--) { const p = this.spot(r, herd, 2, 14) ?? herd; const a = this.actor(`fauna${++n}`, 'fauna', 'deer', p, { speed: 1.1 }); a.data.hx = herd.x; a.data.hz = herd.z; a.stepTimer = r.range(2, 30); }
-    if (r.chance(0.7)) { const p = far(this.spot(r, centre, 100, 640, true)); if (p) { const a = this.actor(`fauna${++n}`, 'fauna', 'fox', p, { speed: 2.1 }); a.data.hx = p.x; a.data.hz = p.z; a.data.callT = r.range(120, 600); } }
+    if (r.chance(0.7)) { const p = far(this.spot(r, centre, 100, WORLD_HALF - 60, true)); if (p) { const a = this.actor(`fauna${++n}`, 'fauna', 'fox', p, { speed: 2.1 }); a.data.hx = p.x; a.data.hz = p.z; a.data.callT = r.range(120, 600); } }
     const bins = this.h.objects({ kind: 'bin' });
     for (let i = r.int(0, Math.min(2, bins.length)); i > 0; i--) {
       const bin = r.pick(bins), p = this.spot(r, bin.pos, 25, 60, true);
@@ -153,9 +157,10 @@ export class Simulation implements ISimulation {
     }
     const trees = this.model.trees, nt = Math.floor(trees.length / 5);
     const perch = (arch: string, count: number) => {
-      for (let i = 0; i < count && nt > 0; i++) {
+      for (let i = 0, tries = 0; i < count && nt > 0 && tries < count * 12; tries++) {
         const k = r.int(0, nt - 1), p = { x: trees[k * 5], z: trees[k * 5 + 1] };
-        if (Math.abs(p.x) > LIMIT || Math.abs(p.z) > LIMIT) continue;
+        if (Math.abs(p.x) > LIMIT || Math.abs(p.z) > LIMIT) continue; // alberi oltre il confine della mappa
+        i++;
         const a = this.actor(`fauna${++n}`, 'fauna', arch, p, { state: 'perch' });
         a.data.y = r.range(4.5, 8); a.data.callT = r.range(40, 400);
       }
@@ -164,7 +169,7 @@ export class Simulation implements ISimulation {
     // conigli: piccole colonie sparse, brucano vicino alla tana
     const rr = r.fork('rabbits');
     for (let c = rr.int(4, 7); c > 0; c--) {
-      const warren = far(this.spot(rr, centre, 40, 640));
+      const warren = far(this.spot(rr, centre, 40, WORLD_HALF - 60));
       if (!warren) continue;
       for (let i = rr.int(2, 4); i > 0; i--) {
         const p = this.spot(rr, warren, 1, 9) ?? warren;
@@ -184,7 +189,7 @@ export class Simulation implements ISimulation {
       const has = (c: CapabilityId) => ids.includes(c);
       const arch = has('appear') ? (r.chance(0.75) ? 'figure' : 'mass') : has('light') ? 'light' : 'presence';
       const zones = this.spec.zones.filter((z) => z.kind === 'isolated' || z.kind === 'dense' || z.kind === 'clearing');
-      const home = zones.length ? r.pick(zones).pos : this.spot(r, { x: 0, z: 0 }, 100, 600) ?? { x: 0, z: 0 };
+      const home = zones.length ? r.pick(zones).pos : this.spot(r, { x: 0, z: 0 }, 100, WORLD_HALF - 100) ?? { x: 0, z: 0 };
       const a = this.actor(`anom${i + 1}`, 'anomaly', arch, home, {
         present: false, visible: false, capabilities: caps, state: 'dormant', speed: r.range(0.4, 1.6),
         drives: { curiosity: r.next(), shyness: r.next(), territorial: r.next(), restless: r.next() },
@@ -233,6 +238,9 @@ export class Simulation implements ISimulation {
     }
     this.encounters.step(dt);
     this.watcher.step(dt);
+    const t0 = this.st.time;
+    const preHush = this.st.mysteries.some((m) => m.timeline.some((e) => !e.done && e.t > t0 && e.t - t0 <= DREAD_HUSH));
+    this.dread.step(dt, preHush);
     this.mood.step(dt);
     if (st.ended) return;
     this.stepSky(dt);
@@ -329,9 +337,15 @@ export class Simulation implements ISimulation {
     const len = Math.min(d, speed * dt);
     a.heading = Math.atan2(dx, dz);
     a.data.moving = true;
-    if (this.h.playerDistance(a.pos) > 300) { a.pos.x += (dx / d) * len; a.pos.z += (dz / d) * len; return false; } // fuori vista: astratto
+    // l'acqua profonda non si attraversa; chi ci è già dentro può solo andare verso acqua più bassa
+    const maxDepth = Math.max(0.25, this.model.waterDepthAt(a.pos.x, a.pos.z));
+    if (this.h.playerDistance(a.pos) > 300) { // fuori vista: astratto
+      const nx = a.pos.x + (dx / d) * len, nz = a.pos.z + (dz / d) * len;
+      if (this.model.waterDepthAt(nx, nz) > maxDepth) { a.data.stuck = Number(a.data.stuck ?? 0) + dt; return false; }
+      a.pos.x = nx; a.pos.z = nz; return false;
+    }
     const np = this.model.move(a.pos, (dx / d) * len, (dz / d) * len, this.doorOpen, 0.3);
-    const blocked = this.model.waterDepthAt(np.x, np.z) > 0.25;
+    const blocked = this.model.waterDepthAt(np.x, np.z) > maxDepth;
     const moved = blocked ? 0 : Math.hypot(np.x - a.pos.x, np.z - a.pos.z);
     if (!blocked) a.pos = np;
     a.data.stuck = moved < len * 0.25 ? Number(a.data.stuck ?? 0) + dt : 0;
@@ -527,7 +541,8 @@ export class Simulation implements ISimulation {
       a.stepTimer -= dt;
       if (this.walk(a, Number(a.data.tx), Number(a.data.tz), speedRun, dt) || a.stepTimer <= 0 || Number(a.data.stuck) > 1) {
         a.state = 'idle'; a.stepTimer = rabbit ? r.range(5, 14) : r.range(15, 50);
-        if (!rabbit) { a.data.hx = a.pos.x; a.data.hz = a.pos.z; } // il coniglio, passato lo spavento, torna verso la tana
+        // il coniglio, passato lo spavento, torna verso la tana; gli altri restano dove sono (mai in acqua)
+        if (!rabbit && this.model.waterDepthAt(a.pos.x, a.pos.z) <= 0) { a.data.hx = a.pos.x; a.data.hz = a.pos.z; }
       }
       return;
     }
@@ -565,6 +580,11 @@ export class Simulation implements ISimulation {
       return;
     }
     a.stepTimer -= dt;
+    // finito in acqua (sponda franata, piena): esce subito verso la riva più vicina
+    if (this.model.waterDepthAt(a.pos.x, a.pos.z) > 0.2) {
+      const dry = this.spot(r, a.pos, 2, 30) ?? this.spot(r, a.pos, 20, 80);
+      if (dry) { a.state = 'move'; a.data.tx = dry.x; a.data.tz = dry.z; a.data.hx = dry.x; a.data.hz = dry.z; a.data.stuck = 0; return; }
+    }
     if (a.stepTimer <= 0) {
       const p = rabbit ? this.spot(r, { x: Number(a.data.hx), z: Number(a.data.hz) }, 1, 13) : this.spot(r, { x: Number(a.data.hx), z: Number(a.data.hz) }, 6, a.archetype === 'fox' ? 90 : 40, a.archetype !== 'raccoon');
       if (p) { a.state = 'move'; a.data.tx = p.x; a.data.tz = p.z; a.data.stuck = 0; } else a.stepTimer = 10;
@@ -645,7 +665,7 @@ export class Simulation implements ISimulation {
     if (rv >= 1) return;
     const torch = this.st.torch.on && this.st.torch.charge > 0.02;
     if (d < 10 || (torch && d < 19 && this.h.playerCanSee(a.pos))) {
-      a.data.reveal = Math.min(1, rv + dt * 0.45);
+      a.data.reveal = Math.min(1, rv + dt * 0.28); // lento: la sagoma diventa ceppo poco a poco
       if (rv === 0) this.h.emit({ type: 'illusion_resolved', pos: a.pos, origin: 'illusion', actorId: a.id, radius: 2, tags: ['illusion'] });
     }
   }
@@ -895,8 +915,12 @@ export class Simulation implements ISimulation {
 
   mysteryMood() { return this.mood.view(); }
   localAlterations(): LocalAlterations { return this.alter; }
-  hushSources() { return this.hush; }
-  interference() { return this.inter; }
+  hushSources() { const d = this.dread.hush(); return d ? this.hush.concat(d) : this.hush; }
+  interference() {
+    const d = this.dread.interference();
+    if (d.torch <= 0 && d.gps <= 0) return this.inter;
+    return { torch: Math.max(this.inter.torch, d.torch), phone: this.inter.phone, gps: Math.max(this.inter.gps, d.gps) };
+  }
   onPlayerEvent(_e: WorldEvent): void { /* gli eventi del giocatore arrivano agli attori dal registro (processLog) */ }
 }
 

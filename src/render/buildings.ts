@@ -108,9 +108,33 @@ export function buildBuilding(c: Ctx, b: BuildingSpec, parent: TransformNode): B
     }
     case 'house': {
       const hc = PAL_HOUSE[p], dk = mixHex(hc, 0, 0.18), sh = PAL_DOOR[(p + 2) % 6];
-      g.box(0, -0.3, 0, w + 0.16, 0.5, d + 0.16, STONE);
-      g.box(0, h / 2, 0, w, h, d, hc, 1);
-      for (let y = 0.3; y < h; y += 0.3) g.box(0, y, 0, w + 0.03, 0.022, d + 0.03, dk, 3);
+      const T = WALL_T, open = b.enterable, fz = open ? hd + T : hd;
+      g.box(0, -0.3, 0, w + 0.16 + (open ? 2 * T : 0), 0.5, d + 0.16 + (open ? 2 * T : 0), STONE);
+      if (!open) {
+        g.box(0, h / 2, 0, w, h, d, hc, 1);
+        for (let y = 0.3; y < h; y += 0.3) g.box(0, y, 0, w + 0.03, 0.022, d + 0.03, dk, 3);
+      } else {
+        // casa visitabile: muri cavi come la baita, pavimento di assi, intonaco chiaro all'interno
+        g.jit = 0.08;
+        for (let i = 0; i < 9; i++) g.box(-hw + (i + 0.5) * (w / 9), -0.04, 0, w / 9 - 0.015, 0.08, d - 0.02, PLANK, 1);
+        g.jit = 0.04;
+        for (const sg of cabinWallSegments(b)) if (!sg.door) g.box(sg.lx, h / 2, sg.lz, sg.hx * 2, h, sg.hz * 2, hc, 1);
+        g.box(b.doorOffset, (DOOR_H + h) / 2, hd, DOOR_GAP * 2, h - DOOR_H, T * 2, hc);
+        const inner = mixHex(hc, 0xffffff, 0.25);
+        g.box(0, h / 2, -hd + T + 0.004, w - 2 * T, h, 0.008, inner);
+        for (const sx of [-1, 1]) g.box(sx * (hw - T - 0.004), h / 2, 0, 0.008, h, d - 2 * T, inner);
+        g.box(0, h - 0.02, 0, w, 0.06, d, mixHex(inner, 0, 0.15)); // soffitto
+        for (let y = 0.3; y < h; y += 0.3) {
+          g.box(0, y, -hd - T - 0.012, w + 2 * T, 0.022, 0.02, dk, 3);
+          for (const sx of [-1, 1]) g.box(sx * (hw + T + 0.012), y, 0, 0.02, 0.022, d + 2 * T, dk, 3);
+          const l = b.doorOffset - DOOR_GAP - 0.1, r = b.doorOffset + DOOR_GAP + 0.1;
+          if (y > DOOR_H + 0.05) g.box(0, y, hd + T + 0.012, w + 2 * T, 0.022, 0.02, dk, 3);
+          else {
+            g.box((-hw - T + l) / 2, y, hd + T + 0.012, l + hw + T, 0.022, 0.02, dk, 3);
+            g.box((hw + T + r) / 2, y, hd + T + 0.012, hw + T - r, 0.022, 0.02, dk, 3);
+          }
+        }
+      }
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.box(sx * hw, h / 2, sz * hd, 0.16, h, 0.16, trim);
       const rise = hd * 0.6;
       gableRoof(g, w, hd, h, rise, 0.55, roof, mixHex(roof, 0, 0.3));
@@ -129,13 +153,18 @@ export function buildBuilding(c: Ctx, b: BuildingSpec, parent: TransformNode): B
         g.box(s * (pw / 2 - 0.08), 0.85, hd + 0.8, 0.05, 0.06, 1.55, trim);
         for (let i = 0; i < 5; i++) g.box(s * (pw / 2 - 0.08), 0.43, hd + 0.2 + i * 0.3, 0.035, 0.82, 0.035, trim);
       }
-      g.box(0, 1.02, hd + 0.004, DOOR_GAP * 2, DOOR_H, 0.008, DARK);
-      doorFrame(g, 0, hd + 0.025, trim);
-      const fx = Math.max(hw * 0.62, 2.0);
+      if (!open) g.box(0, 1.02, hd + 0.004, DOOR_GAP * 2, DOOR_H, 0.008, DARK);
+      doorFrame(g, 0, fz + 0.025, trim);
+      const fx = Math.max(hw * 0.62, 2.0), ow = open ? T : 0;
       for (const s of [-1, 1]) {
-        windowAt(g, gw, s * fx, 1.5, hd + 0.006, 0, 1.0, 1.2, trim, sh);
-        windowAt(g, gw, s * hw * 0.5, 1.5, -hd - 0.006, Math.PI, 1.0, 1.2, trim);
-        windowAt(g, gw, s * (hw + 0.006), 1.5, 0, s * Math.PI / 2, 1.0, 1.2, trim, sh);
+        windowAt(g, gw, s * fx, 1.5, fz + 0.006, 0, 1.0, 1.2, trim, sh);
+        windowAt(g, gw, s * hw * 0.5, 1.5, -hd - ow - 0.006, Math.PI, 1.0, 1.2, trim);
+        windowAt(g, gw, s * (hw + ow + 0.006), 1.5, 0, s * Math.PI / 2, 1.0, 1.2, trim, sh);
+        if (open) { // le stesse finestre viste da dentro
+          windowAt(g, gw, s * fx, 1.5, hd - T - 0.012, Math.PI, 1.0, 1.2, trim);
+          windowAt(g, gw, s * hw * 0.5, 1.5, -hd + T + 0.012, 0, 1.0, 1.2, trim);
+          windowAt(g, gw, s * (hw - T - 0.012), 1.5, 0, -s * Math.PI / 2, 1.0, 1.2, trim);
+        }
       }
       break;
     }
@@ -179,6 +208,51 @@ export function buildBuilding(c: Ctx, b: BuildingSpec, parent: TransformNode): B
       doorFrame(g, 0, hd + 0.025, trim);
       g.box(-1.0, 1.6, hd + 0.012, 0.26, 0.3, 0.02, 0xe6e2d6).box(-1.0, 1.56, hd + 0.025, 0.07, 0.14, 0.01, 0x2a3a52).box(-1.0, 1.68, hd + 0.025, 0.06, 0.06, 0.01, 0x2a3a52);
       g.box(-1.4, 1.02, hd + 0.2, 0.55, 0.05, 0.4, PLANK).beam([-1.4, 0.75, hd], [-1.4, 1.0, hd + 0.32], 0.04, STEEL);
+      break;
+    }
+    case 'church': {
+      // navata con tetto a capanna lungo z, campanile in facciata con cuspide e croce
+      const hc = mixHex(PAL_HOUSE[p], 0xd8d2c4, 0.45), dk = mixHex(hc, 0, 0.2), rise = hw * 0.75;
+      g.box(0, -0.3, 0, w + 0.3, 0.5, d + 0.3, STONE);
+      g.box(0, h / 2, 0, w, h, d, hc, 1);
+      g.box(0, 0.45, 0, w + 0.04, 0.9, d + 0.04, mixHex(STONE, hc, 0.3), 3);
+      g.push().ry(Math.PI / 2);
+      gableRoof(g, d, hw, h, rise, 0.4, roof, mixHex(roof, 0, 0.3));
+      g.pop();
+      g.tri([-hw, h, -hd], [hw, h, -hd], [0, h + rise, -hd], hc, [0, 0, -1]);
+      g.tri([-hw, h, hd], [hw, h, hd], [0, h + rise, hd], hc, [0, 0, 1]);
+      // finestre alte e strette sui fianchi, rosone in facciata
+      for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) windowAt(g, gw, sx * (hw + 0.006), 3.0, -hd + 2 + i * ((d - 6) / 3), sx * Math.PI / 2, 0.7, 2.4, dk);
+      windowAt(g, gw, 0, h - 0.6 + rise * 0.35, hd + 0.006, 0, 1.0, 1.0, dk);
+      // campanile sul fianco della facciata
+      const tw = 2.6, tx = hw - tw / 2 - 0.05, tz = hd - tw / 2 - 0.05, th = h + 8;
+      g.box(tx, th / 2, tz, tw + 0.1, th, tw + 0.1, mixHex(hc, 0, 0.08));
+      for (let y = 3; y < th - 1; y += 3) g.box(tx, y, tz, tw + 0.16, 0.12, tw + 0.16, dk, 3);
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2, ox = Math.sin(a) * (tw / 2 + 0.06), oz = Math.cos(a) * (tw / 2 + 0.06);
+        g.box(tx + ox, th - 1.4, tz + oz, Math.abs(ox) > 0.1 ? 0.02 : 1.0, 1.6, Math.abs(ox) > 0.1 ? 1.0 : 0.02, DARK); // cella campanaria
+      }
+      g.frustum(tx, tz, th, tw + 0.5, tw + 0.5, th + 3.6, 0.1, 0.1, roof);
+      g.box(tx, th + 4.2, tz, 0.09, 1.2, 0.09, 0x8a8478).box(tx, th + 4.4, tz, 0.6, 0.09, 0.09, 0x8a8478);
+      // portale a due battenti e gradini
+      g.box(-0.9, 1.35, hd + 0.004, 2.0, 2.7, 0.01, DARK);
+      g.box(-0.9, 2.85, hd + 0.02, 2.4, 0.18, 0.06, trim).box(-2.05, 1.4, hd + 0.02, 0.18, 2.8, 0.06, trim).box(0.25, 1.4, hd + 0.02, 0.18, 2.8, 0.06, trim);
+      g.box(-0.9, -0.1, hd + 0.6, 3.2, 0.2, 1.2, STONE).box(-0.9, -0.25, hd + 1.4, 3.6, 0.2, 0.6, STONE);
+      break;
+    }
+    case 'barn': {
+      // fienile di legno scuro con portone scorrevole
+      const wood = mixHex(0x6e3a2c, PAL_WALL[p], 0.35), dk = mixHex(wood, 0, 0.3);
+      g.box(0, h / 2 - 0.1, 0, w, h + 0.2, d, wood, 1);
+      for (let x = -hw + 0.3; x < hw; x += 0.3) for (const sz of [-1, 1]) g.box(x, h / 2, sz * (hd + 0.01), 0.03, h, 0.02, dk);
+      const rise = hd * 0.8;
+      gableRoof(g, w, hd, h, rise, 0.45, roof, mixHex(roof, 0, 0.3));
+      for (const sx of [-1, 1]) g.tri([sx * hw, h, -hd], [sx * hw, h, hd], [sx * hw, h + rise, 0], wood, [sx, 0, 0]);
+      g.box(0, 1.5, hd + 0.02, 3.2, 3.0, 0.03, dk).box(0, 1.5, hd + 0.04, 3.2, 0.12, 0.02, mixHex(dk, 0xffffff, 0.2));
+      g.beam([-1.6, 0.05, hd + 0.05], [1.6, 2.95, hd + 0.05], 0.1, mixHex(dk, 0xffffff, 0.2), 0.02);
+      g.beam([1.6, 0.05, hd + 0.05], [-1.6, 2.95, hd + 0.05], 0.1, mixHex(dk, 0xffffff, 0.2), 0.02);
+      g.box(0, 3.3, hd + 0.1, 3.6, 0.1, 0.2, STEEL);
+      windowAt(g, gw, 0, h + rise * 0.3, hd + 0.006, 0, 0.9, 0.7, dk);
       break;
     }
     case 'tower': {
@@ -270,6 +344,22 @@ export function buildPlatform(c: Ctx, p: Platform, parent: TransformNode): Built
     }
     for (const s of [-1, 1]) g.box(s * 0.25, -0.75, hz + 0.06, 0.05, 1.7, 0.05, STEEL);
     for (let i = 0; i < 5; i++) g.box(0, -0.1 - i * 0.32, hz + 0.06, 0.5, 0.04, 0.04, STEEL);
+    // barche a remi ormeggiate accanto al molo, a pelo d'acqua (0,9 m sotto l'impalcato)
+    let hsh = 0;
+    for (const ch of p.id) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    const nb = 1 + (hsh % 2), hulls = [0x3d5a6e, 0x7a3b2e, 0x5f6b4a, 0xb8b2a0];
+    for (let k = 0; k < nb; k++) {
+      const side = (k + hsh) % 2 ? 1 : -1, bz = hz - 2.4 - k * 4.2, col = hulls[(hsh >> (k * 2)) % 4];
+      if (bz < -hz + 1.5) break;
+      g.push().tr(side * (hx + 1.0), -0.95, bz).ry(((hsh >> 3) % 7 - 3) * 0.03);
+      g.frustum(0, 0, -0.35, 0.55, 2.6, 0.1, 1.25, 3.6, col);
+      g.box(0, 0.09, 0, 1.15, 0.02, 3.4, 0x1c1a17);
+      g.box(0, 0.12, -1.72, 0.9, 0.06, 0.1, mixHex(col, 0xffffff, 0.3)).box(0, 0.12, 1.72, 0.9, 0.06, 0.1, mixHex(col, 0xffffff, 0.3));
+      for (const sz of [-0.8, 0.5]) g.box(0, 0.02, sz, 1.1, 0.05, 0.3, PLANK);
+      g.beam([0.3, 0.15, -0.3], [0.45, 0.1, 1.4], 0.05, PLANK).beam([-0.3, 0.15, -0.3], [-0.45, 0.1, 1.4], 0.05, PLANK);
+      g.beam([-side * 0.2, 0.15, 1.6], [-side * 0.95, 0.9, 1.4], 0.025, 0x8a7a5a); // cima d'ormeggio
+      g.pop();
+    }
   }
   const main = g.build('plat.' + p.id, c.scene, c.mats.vc, drift);
   c.shadow(main);

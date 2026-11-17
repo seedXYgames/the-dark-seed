@@ -132,10 +132,10 @@ export class LightingRig {
     // come una torcia vera: punto caldo al centro, alone più debole e bordo in penombra (profilo in una texture proiettata)
     this.torch.parent = camera;
     this.torch.range = TORCH_RANGE;
-    this.torch.shadowMinZ = 0.35; this.torch.shadowMaxZ = 60;
+    this.torch.shadowMinZ = 0.35; this.torch.shadowMaxZ = TORCH_RANGE * 0.85;
     this.torchTex = makeTorchTexture(scene);
     this.torch.projectionTexture = this.torchTex;
-    this.torch.projectionTextureLightNear = 0.05; this.torch.projectionTextureLightFar = 80;
+    this.torch.projectionTextureLightNear = 0.05; this.torch.projectionTextureLightFar = TORCH_RANGE + 10;
     this.torch.diffuse.set(...TORCH_COLOR); this.torch.specular.set(0.35, 0.338, 0.315);
     this.torch.intensity = 0;
     this.phone = new PointLight('tds.phone', new Vector3(0, -0.28, 0.32), scene);

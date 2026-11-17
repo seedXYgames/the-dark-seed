@@ -2,7 +2,9 @@
 // narrativa) dipende solo da questi tipi e non da Babylon.js: per questo è testabile headless.
 
 export const GENERATOR_VERSION = 1;
-export const WORLD_SIZE = 1400; // metri, lato del quadrato giocabile
+export const WORLD_SIZE = 1000; // metri, lato del quadrato giocabile (era 1400: meno corse a vuoto)
+/** Scala rispetto alla mappa originale da 1400 m, per le distanze di piazzamento. */
+export const WORLD_K = WORLD_SIZE / 1400;
 export const WORLD_HALF = WORLD_SIZE / 2;
 export const SEED_MIN = 0;
 export const SEED_MAX = 1_000_000;
@@ -38,6 +40,8 @@ export interface Poi {
   baseHeight: number;
   lit: boolean;
   variant: number;
+  /** Lunghezza del molo (m) per i porticcioli; 20 se assente. */
+  pier?: number;
 }
 
 export type PathKind = 'road' | 'trail';
@@ -70,7 +74,7 @@ export interface TerrainSpec {
   forestBias: number; // densità media del bosco
 }
 
-export type BuildingKind = 'cabin' | 'house' | 'kiosk' | 'shed' | 'restroom' | 'tower' | 'canopy';
+export type BuildingKind = 'cabin' | 'house' | 'kiosk' | 'shed' | 'restroom' | 'tower' | 'canopy' | 'church' | 'barn';
 export interface BuildingSpec {
   id: string;
   poiId: string;
@@ -415,5 +419,5 @@ export interface Settings { lang: Lang; gfx: GraphicsSettings }
 
 export const DEFAULT_SETTINGS: Settings = {
   lang: 'it',
-  gfx: { brightness: 1, quality: 'medium', renderScale: 0.85, shadows: true, antialias: true, drawDistance: 420, fogEffects: true },
+  gfx: { brightness: 1, quality: 'high', renderScale: 1, shadows: true, antialias: true, drawDistance: 700, fogEffects: true },
 };

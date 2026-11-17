@@ -49,6 +49,13 @@ export class Phone {
   private open = false;
   private tab: PhoneTab = 'messages';
   private view: PhoneView | null = null;
+  /** Mirino dal vivo: copia dell'inquadratura del gioco, riusata tra un aggiornamento e l'altro. */
+  private readonly finder: HTMLCanvasElement = (() => {
+    const c = document.createElement('canvas');
+    c.className = 'tds-cam-live';
+    c.width = 270; c.height = 360;
+    return c;
+  })();
   private readonly sig: Record<PhoneTab, string> = { messages: '', tasks: '', camera: '', gallery: '', map: '' };
 
   private readonly panes: Record<PhoneTab, HTMLElement>;
@@ -137,6 +144,11 @@ export class Phone {
   }
 
   // ------------------------------------------------------------ API
+
+  /** Il mirino, se la fotocamera è aperta e visibile; null altrimenti. */
+  viewfinder(): HTMLCanvasElement | null {
+    return this.open && this.tab === 'camera' && this.finder.isConnected ? this.finder : null;
+  }
 
   isOpen(): boolean {
     return this.open;
@@ -292,7 +304,7 @@ export class Phone {
       }
     }
     const lang = this.lang();
-    const sig = `${lang}|${v.allReported}|${v.missions.map((m) => `${m.id}:${m.state}:${m.canReport}:${m.title}:${m.place}`).join(';')}|${v.reports
+    const sig = `${lang}|${v.allReported}|${v.missions.map((m) => `${m.id}:${m.n}:${m.state}:${m.canReport}:${m.title}:${m.place}`).join(';')}|${v.reports
       .map((r) => `${r.id}:${r.missionId}`)
       .join(',')}|${Array.from(this.expanded).join(',')}`;
     if (sig === this.sig.tasks) return;
@@ -312,7 +324,9 @@ export class Phone {
   private missionCard(m: MissionView, v: PhoneView, lang: Lang): HTMLElement {
     const card = el('article', `tds-task is-${m.state}`);
     const head = el('div', 'tds-task-head');
-    head.append(el('h4', 'tds-task-title', m.title), el('span', 'tds-chip', t(lang, `phone.state.${m.state}`)));
+    const title = el('h4', 'tds-task-title', m.title);
+    if (m.n) { const pin = el('span', `tds-task-pin is-${m.state}`, m.state === 'reported' ? '✓' : String(m.n)); pin.setAttribute('aria-hidden', 'true'); title.prepend(pin); }
+    head.append(title, el('span', 'tds-chip', t(lang, `phone.state.${m.state}`)));
     card.append(head, el('p', 'tds-task-place', m.place));
     if (m.state === 'pending') {
       card.appendChild(el('p', 'tds-task-note', t(lang, 'phone.needInspect')));
@@ -486,6 +500,7 @@ export class Phone {
     const pane = this.panes.camera;
     pane.textContent = '';
     const frame = el('div', 'tds-cam-frame');
+    frame.appendChild(this.finder);
     for (const c of ['tl', 'tr', 'bl', 'br']) frame.appendChild(el('i', `tds-cam-corner is-${c}`));
     frame.appendChild(el('p', 'tds-cam-hint', t(lang, full ? 'phone.camera.full' : 'phone.camera.hint')));
     const bar = el('div', 'tds-cam-bar');
@@ -603,7 +618,7 @@ export class Phone {
     const px = Math.round(side * dpr);
     const m = v.map;
     const moving = m.glitch > 0;
-    const sig = `${lang}|${px}|${m.size}|${m.edges.length}|${m.pois.length}|${Math.round(m.player.pos.x * 2)}|${Math.round(m.player.pos.z * 2)}|${Math.round(
+    const sig = `${lang}|${px}|${m.size}|${m.edges.length}|${m.pois.length}|${(m.targets ?? []).map((x) => x.state[0]).join('')}|${Math.round(m.player.pos.x * 2)}|${Math.round(m.player.pos.z * 2)}|${Math.round(
       m.player.yaw * 40,
     )}|${Math.round(m.car.x)}|${Math.round(m.car.z)}|${m.glitch.toFixed(2)}`;
     if (moving && !this.mapTimer) {

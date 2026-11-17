@@ -1,4 +1,5 @@
 // Bosco: mesh low-poly procedurali per variante, thin instances per chunk con due LOD, massi, sottobosco vicino.
+import { WORLD_HALF } from '../core/contracts';
 import type { Scene } from '@babylonjs/core/scene';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
@@ -283,7 +284,7 @@ export class ForestRenderer {
     const bGroups: number[][] = [];
     for (let i = 0; i < CHUNK_N * CHUNK_N; i++) bGroups.push([]);
     const bush: number[] = []; // x, y, z, scala, rotazione, tipo
-    const salt = (model.spec.terrain.salt | 0) + 9100, bn = Math.floor(700 / BUSH_CELL);
+    const salt = (model.spec.terrain.salt | 0) + 9100, bn = Math.floor((WORLD_HALF + 60) / BUSH_CELL);
     for (let j = -bn; j < bn; j++)
       for (let i = -bn; i < bn; i++) {
         const h = hash3(i, j, salt);
@@ -291,7 +292,7 @@ export class ForestRenderer {
         const x = (i + 0.1 + 0.8 * hash3(i, j, salt + 1)) * BUSH_CELL, z = (j + 0.1 + 0.8 * hash3(i, j, salt + 2)) * BUSH_CELL;
         const fd = sampleField(fields.forest, x, z);
         if (fd < 0.12 || (fd > 0.8 && h > 0.2)) continue; // più fitti ai margini del bosco che nel folto
-        if (sampleField(fields.slope, x, z) > 0.75 || model.pathMaskAt(x, z) > 0.02 || model.waterDepthAt(x, z) > 0) continue;
+        if (sampleField(fields.slope, x, z) > 0.75 || model.pathMaskAt(x, z) > 0.02 || model.waterDepthAt(x, z) > 0 || model.nearBuildingAt(x, z, 2)) continue;
         bGroups[chunkIndex(x, z)].push(bush.length / 6);
         bush.push(x, model.heightAt(x, z), z, 0.7 + 0.9 * hash3(i, j, salt + 3), hash3(i, j, salt + 4) * 6.28, Math.floor(hash3(i, j, salt + 5) * NBUSH));
       }
@@ -429,16 +430,16 @@ export class ForestRenderer {
         const x = (i + 0.15 + 0.7 * hash3(i, j, 7002)) * cell, z = (j + 0.15 + 0.7 * hash3(i, j, 7003)) * cell;
         const d = Math.hypot(x - cx, z - cz);
         if (d > R || Math.abs(x) > 760 || Math.abs(z) > 760) continue;
-        if (model.pathMaskAt(x, z) > 0.02 || model.waterDepthAt(x, z) > 0) continue;
+        if (model.pathMaskAt(x, z) > 0.02 || model.waterDepthAt(x, z) > 0 || model.nearBuildingAt(x, z)) continue;
         const fd = sampleField(this.fields.forest, x, z);
         if (fd < 0.1 && hash3(i, j, 7006) > 0.25) continue; // POI e radure curate: quasi nulla
         if (sampleField(this.fields.slope, x, z) > 0.8) continue;
         const kind = fd > 0.5 ? (h < 0.24 ? 1 : h < 0.44 ? 2 : 0) : (h < 0.4 ? 0 : h < 0.55 ? 2 : 1);
         const n = counts[kind];
         if (n >= this.coverCap) continue;
-        const fade = sstep(R, R * 0.6, d); // cresce avvicinandosi: nessuna comparsa improvvisa
-        const s = (0.75 + 0.7 * hash3(i, j, 7004)) * fade;
-        if (s < 0.02) continue;
+        // dimensione fissa: ogni ciuffo è sempre lo stesso nello stesso punto e non cresce avvicinandosi;
+        // il raggio è così ampio che il bordo resta nel buio e nella nebbia
+        const s = 0.75 + 0.7 * hash3(i, j, 7004);
         writeMatrix(this.coverBuf[kind], n * 16, x, model.heightAt(x, z) - 0.03, z, hash3(i, j, 7005) * 6.28, s, s, s);
         counts[kind] = n + 1;
       }
@@ -450,7 +451,7 @@ export class ForestRenderer {
 
   /** Aggiorna LOD dei chunk (a intervalli) e sottobosco. Restituisce true se l'insieme dei chunk vicini è cambiato. */
   update(dt: number, cx: number, cz: number): boolean {
-    if (Math.hypot(cx - this.coverX, cz - this.coverZ) > 0.6) { this.coverX = cx; this.coverZ = cz; this.refreshCover(cx, cz); }
+    if (Math.hypot(cx - this.coverX, cz - this.coverZ) > 2.5) { this.coverX = cx; this.coverZ = cz; this.refreshCover(cx, cz); }
     this.lodTimer -= dt;
     if (!this.lodDirty && (this.lodTimer > 0 || Math.hypot(cx - this.lodX, cz - this.lodZ) < 4)) return false;
     this.lodTimer = this.q.lodInterval; this.lodX = cx; this.lodZ = cz; this.lodDirty = false;
@@ -464,7 +465,7 @@ export class ForestRenderer {
         for (const m of ch.near) m.setEnabled(lod === 0);
         for (const m of ch.far) m.setEnabled(lod === 1);
       }
-      const rocksOn = d <= Math.min(this.q.rockDist, this.drawDistance);
+      const rocksOn = true; // massi e cespugli restano sempre nella mappa, a qualsiasi distanza
       if (rocksOn !== ch.rocksOn) { ch.rocksOn = rocksOn; ch.rocks?.setEnabled(rocksOn); for (const m of ch.bushes) m.setEnabled(rocksOn); }
       if (lod === 0) for (const m of ch.near) this.nearActive.push(m);
     }

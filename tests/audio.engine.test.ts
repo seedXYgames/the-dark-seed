@@ -9,7 +9,7 @@ const KINDS: SoundKind[] = [
   'tent_zip', 'breaker', 'metal_clank', 'bin_tip', 'twig', 'owl', 'fox', 'deer', 'crows', 'frog', 'splash',
   'vehicle_pass', 'vehicle_start', 'car_door', 'typing', 'paper', 'camera', 'sms', 'battery', 'click', 'steps_far',
   'voice_far', 'knock', 'hum_anom', 'whisper_anom', 'tone_anom', 'thunder', 'branch_fall', 'fire_douse', 'ui',
-  'torch_click', 'rustle', 'chair_scrape', 'report_sent', 'screech', 'nightbird', 'alien_call', 'bigfoot_growl', 'cult_chant',
+  'torch_click', 'rustle', 'chair_scrape', 'report_sent', 'screech', 'nightbird', 'alien_call', 'bigfoot_growl', 'cult_chant', 'mimic_step',
 ];
 const LOOP_KINDS: LoopKind[] = ['generator', 'water', 'fire', 'lamp_buzz', 'anom_drone', 'engine_idle', 'mystery_music'];
 const SURFACES: Surface[] = ['grass', 'dirt', 'road', 'wood', 'snow', 'floor', 'wet'];

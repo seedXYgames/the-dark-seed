@@ -402,6 +402,8 @@ export class Screens {
     panel.appendChild(row('settings.language', this.setLang.el, idLang));
 
     panel.appendChild(i18n(el('h3', 'tds-h3'), 'settings.graphics'));
+    // Si regolano solo lingua e luminosità: il resto della grafica è sempre al massimo (scelta di Ivan).
+    // I controlli sotto restano costruiti ma non vengono mostrati.
 
     const idB = this.uid('bright');
     this.sBrightness = slider(LIMITS.brightness, idB, (v) => v.toFixed(2), (v) => change({ brightness: v }));
@@ -420,19 +422,15 @@ export class Screens {
         this.host.changeSettings({ lang: s.lang, gfx: applyQualityPreset(s.gfx, q) });
       },
     );
-    panel.appendChild(row('settings.quality', this.setQuality.el, idQ));
 
     const idS = this.uid('scale');
     this.sScale = slider(LIMITS.renderScale, idS, (v) => `${Math.round(v * 100)}%`, (v) => change({ renderScale: v }));
-    panel.appendChild(row('settings.renderScale', this.sScale.el, idS));
 
     const idSh = this.uid('shadows');
     this.setShadows = onOff(idSh, (on) => change({ shadows: on }));
-    panel.appendChild(row('settings.shadows', this.setShadows.el, idSh));
 
     const idAa = this.uid('aa');
     this.setAa = onOff(idAa, (on) => change({ antialias: on }));
-    panel.appendChild(row('settings.antialias', this.setAa.el, idAa));
 
     const idD = this.uid('dist');
     this.sDistance = slider(
@@ -445,7 +443,6 @@ export class Screens {
 
     const idF = this.uid('fog');
     this.setFog = onOff(idF, (on) => change({ fogEffects: on }));
-    panel.appendChild(row('settings.fog', this.setFog.el, idF));
 
     const back = i18n(el('button', 'tds-btn tds-btn-quiet tds-back'), 'settings.back');
     back.type = 'button';

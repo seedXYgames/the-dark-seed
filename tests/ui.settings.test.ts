@@ -13,16 +13,13 @@ describe('sanitizeSettings', () => {
     expect(s).not.toBe(DEFAULT_SETTINGS);
     expect(s.gfx).not.toBe(DEFAULT_SETTINGS.gfx);
   });
-  it('clamps numeric values', () => {
-    const lo = sanitizeSettings({ lang: 'en', gfx: { brightness: 0.1, renderScale: 0.1, drawDistance: 5 } });
+  it('clamps brightness and forces the rest of the graphics to the maximum', () => {
+    const lo = sanitizeSettings({ lang: 'en', gfx: { brightness: 0.1, renderScale: 0.1, drawDistance: 5, shadows: false } });
     expect(lo.lang).toBe('en');
     expect(lo.gfx.brightness).toBe(0.8);
-    expect(lo.gfx.renderScale).toBe(0.5);
-    expect(lo.gfx.drawDistance).toBe(200);
-    const hi = sanitizeSettings({ gfx: { brightness: 9, renderScale: 4, drawDistance: 99999 } });
-    expect(hi.gfx.brightness).toBe(1.25);
-    expect(hi.gfx.renderScale).toBe(1);
-    expect(hi.gfx.drawDistance).toBe(700);
+    expect(lo.gfx).toEqual({ ...DEFAULT_SETTINGS.gfx, brightness: 0.8 });
+    expect(DEFAULT_SETTINGS.gfx).toMatchObject({ quality: 'high', renderScale: 1, shadows: true, antialias: true, drawDistance: 700, fogEffects: true });
+    expect(sanitizeSettings({ gfx: { brightness: 9 } }).gfx.brightness).toBe(1.25);
   });
   it('rejects wrong types field by field', () => {
     const s = sanitizeSettings({
@@ -31,9 +28,9 @@ describe('sanitizeSettings', () => {
     });
     expect(s).toEqual(DEFAULT_SETTINGS);
   });
-  it('keeps valid values', () => {
-    const v = { lang: 'en', gfx: { brightness: 1.1, quality: 'high', renderScale: 0.7, shadows: false, antialias: false, drawDistance: 555, fogEffects: false } };
-    expect(sanitizeSettings(v)).toEqual(v);
+  it('keeps language and brightness only', () => {
+    const v = { lang: 'en', gfx: { brightness: 1.1, quality: 'low', renderScale: 0.7, shadows: false, antialias: false, drawDistance: 555, fogEffects: false } };
+    expect(sanitizeSettings(v)).toEqual({ lang: 'en', gfx: { ...DEFAULT_SETTINGS.gfx, brightness: 1.1 } });
   });
   it('uses the fallback language only when none is stored', () => {
     expect(sanitizeSettings({}, 'en').lang).toBe('en');
@@ -50,19 +47,6 @@ describe('detectLang', () => {
     expect(detectLang('de')).toBe('en');
     expect(detectLang(undefined)).toBe('en');
     expect(detectLang('')).toBe('en');
-  });
-});
-
-describe('applyQualityPreset', () => {
-  it('stays inside the valid ranges and keeps brightness', () => {
-    for (const q of ['low', 'medium', 'high'] as const) {
-      const g = applyQualityPreset({ ...DEFAULT_SETTINGS.gfx, brightness: 1.2, fogEffects: false }, q);
-      expect(g.quality).toBe(q);
-      expect(g.brightness).toBe(1.2);
-      expect(g.fogEffects).toBe(false);
-      expect(sanitizeSettings({ lang: 'it', gfx: g }).gfx).toEqual(g);
-    }
-    expect(applyQualityPreset(DEFAULT_SETTINGS.gfx, 'medium')).toEqual(DEFAULT_SETTINGS.gfx);
   });
 });
 

@@ -176,6 +176,9 @@ export class EnvironmentRenderer implements IEnvironmentRenderer {
     envShared.windX = Math.sin(weather.windDir) * wAmp; envShared.windZ = Math.cos(weather.windDir) * wAmp; envShared.time = this.windPhase % 4096;
 
     this.rig.update(dt, camPos, pal, alter, torch, weather.fog + (dens > 0.004 ? 0.08 : 0), precip, this.fx.flash, strip);
+    const tpos = this.rig.torchPos, tdir = this.rig.torchDir;
+    envShared.torchP[0] = tpos.x; envShared.torchP[1] = tpos.y; envShared.torchP[2] = tpos.z; envShared.torchP[3] = this.rig.torchLevel;
+    envShared.torchD[0] = tdir.x; envShared.torchD[1] = tdir.y; envShared.torchD[2] = tdir.z;
     this.terrain.update(envShared.wet);
     this.forest.setWet(envShared.wet);
     if (this.forest.update(dt, camPos.x, camPos.z)) this.rig.syncCasters(this.forest.nearActive);

@@ -2,7 +2,8 @@
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { InstancedMesh } from '@babylonjs/core/Meshes/instancedMesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-import type { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { ActorView } from '../core/api';
 import { Geo, type Ctx } from './meshUtil';
 import { hashStr } from './objMath';
@@ -58,7 +59,21 @@ export class ActorsRenderer {
       for (const [id, v] of this.map) if (v.seen !== this.frame) { this.kill(v); this.map.delete(id); }
   }
   private kill(v: AV): void { if (v.glow) this.c.glow.release(v.glow); for (const m of v.meshes) m.dispose(); v.root.dispose(); }
-  dispose(): void { for (const v of this.map.values()) this.kill(v); this.map.clear(); }
+  dispose(): void { for (const v of this.map.values()) this.kill(v); this.map.clear(); this.eyeMat?.dispose(); this.eyeMat = null; }
+
+  private eyeMat: StandardMaterial | null = null;
+  /** Riflesso degli occhi: non illuminato e non coperto dalla nebbia, così brilla nel buio. */
+  private eyeMaterial(): StandardMaterial {
+    if (!this.eyeMat) {
+      const m = new StandardMaterial('actor.eyes', this.c.scene);
+      m.disableLighting = true;
+      m.emissiveColor = new Color3(0.95, 0.9, 0.55);
+      m.diffuseColor = new Color3(0, 0, 0); m.specularColor = new Color3(0, 0, 0);
+      m.fogEnabled = false;
+      this.eyeMat = m;
+    }
+    return this.eyeMat;
+  }
 
   private create(a: ActorView): AV | null {
     if (a.kind === 'phenomenon' || (a.kind === 'anomaly' && a.archetype === 'light')) return null;
@@ -75,7 +90,7 @@ export class ActorsRenderer {
     if (a.kind === 'encounter') {
       const ar = a.archetype;
       if (ar === 'watcher') {
-        // Piccolo uomo in cappotto e cappello: nessun bagliore o segnale luminoso.
+        // Piccolo uomo in cappotto e cappello. Gli occhi riflettono la luce come quelli di un animale.
         g.frustum(0, 0, 0.22, 0.42, 0.29, 1.04, 0.35, 0.21, 0x111318)
           .cyl(0, 1.1, 0, 0.045, 0.045, 0.12, 0x796d5b, 'y', 6)
           .sphere(0, 1.21, 0, 0.11, 0.145, 0.105, 0x8b806c)
@@ -85,9 +100,25 @@ export class ActorsRenderer {
         for (const s of [-1, 1]) g.beam([s * 0.2, 1, 0], [s * 0.23, 0.42, 0], 0.09, 0x111318)
           .box(s * 0.085, 0.17, 0, 0.1, 0.32, 0.12, 0x101114).box(s * 0.085, 0.04, 0.04, 0.12, 0.08, 0.22, 0x090a0c);
         out(g);
-        return { root, meshes, seen: 0, glow: null, fade: plain, upd: (v, dt, t) => {
-          if (v.moving) phase += dt * 6;
-          root.position.y += v.moving ? Math.abs(Math.sin(phase)) * 0.025 : Math.sin(t * 0.8 + hs) * 0.003;
+        const eyePiv = piv(0, 1.235, 0.104);
+        const eg = new Geo(hs);
+        eg.jit = 0;
+        for (const s of [-1, 1]) eg.sphere(s * 0.038, 0, 0, 0.017, 0.012, 0.01, 0xffffff, 6, 4);
+        const eyes = out(eg, eyePiv, this.eyeMaterial());
+        let blinkAt = 3 + (hs % 50) / 10, blink = 0;
+        return { root, meshes, seen: 0, glow: null, fade: (al) => { plain(al); eyes.visibility = al; }, upd: (v, dt, t) => {
+          // corre più forte quando scappa
+          if (v.moving) phase += dt * 11;
+          root.position.y += v.moving ? Math.abs(Math.sin(phase)) * 0.05 : Math.sin(t * 0.8 + hs) * 0.003;
+          // gli occhi restano visibili anche da lontano: crescono con la distanza fino a qualche pixel
+          const cam = c.scene.activeCamera;
+          const dd = cam ? Math.hypot(cam.globalPosition.x - root.position.x, cam.globalPosition.z - root.position.z) : 10;
+          const k = Math.max(1, dd / 22);
+          // battito di palpebre ogni tanto
+          if (t > blinkAt) { blink = 0.16; blinkAt = t + 2.5 + ((hs + Math.floor(t)) % 40) / 8; }
+          blink = Math.max(0, blink - dt);
+          eyePiv.scaling.set(k, blink > 0 ? 0.05 : k, k);
+          eyes.setEnabled(!v.moving || Math.sin(phase * 0.5) > -0.6);
         } };
       }
       if (ar === 'ufo_wreck') {
@@ -286,20 +317,39 @@ export class ActorsRenderer {
     }
 
     if (a.kind === 'illusion') {
-      g.jit = 0;
-      g.cyl(0, 0.7, 0, 0.21, 0.17, 1.4, 0, 'y', 8).sphere(0, 1.37, 0, 0.27, 0.11, 0.15, 0).sphere(0, 1.6, 0, 0.11, 0.13, 0.11, 0).beam([0.24, 1.32, 0], [0.27, 0.72, 0.02], 0.09, 0);
-      const dark = out(g, root, M.black);
-      const s = new Geo(hs), bark = 0x4a3d2e;
-      s.jit = 0.14;
-      s.cyl(0, 0.62, 0, 0.26, 0.17, 1.24, bark, 'y', 8).cyl(0, 0.08, 0, 0.36, 0.26, 0.16, bark, 'y', 8);
-      s.cyl(0, 1.45, 0, 0.11, 0.02, 0.45, 0x8a7352, 'y', 5).cyl(-0.09, 1.33, 0.04, 0.07, 0, 0.26, 0x8a7352, 'y', 4).cyl(0.08, 1.3, -0.05, 0.06, 0, 0.2, 0x7a6548, 'y', 4);
-      s.beam([0.18, 1.2, 0], [0.42, 1.38, 0.05], 0.08, bark).beam([0.42, 1.38, 0.05], [0.5, 1.3, 0.2], 0.03, bark);
-      s.sphere(0.26, 0.95, 0.03, 0.16, 0.3, 0.16, 0x3f5236, 6, 4).sphere(-0.22, 0.3, 0.1, 0.24, 0.22, 0.22, 0x36482f, 6, 4).sphere(0.25, 0.22, -0.15, 0.2, 0.18, 0.2, 0x3f5236, 6, 4).sphere(-0.1, 1.02, -0.12, 0.1, 0.06, 0.1, 0x55643a, 5, 3);
-      const stump = out(s);
+      // Sagoma e ceppo hanno la stessa forma: da lontano il ceppo è solo nero, con un nodo in cima che fa
+      // da testa e un ramo che fa da braccio. Avvicinandosi la luce rivela la corteccia, mentre testa e
+      // braccio si ritirano lentamente dentro il legno: nessun omino che sparisce sopra un albero.
+      const bark = 0x4a3d2e;
+      const stumpGeo = (jit: number): Geo => {
+        const s = new Geo(hs);
+        s.jit = jit;
+        s.cyl(0, 0.62, 0, 0.26, 0.17, 1.24, bark, 'y', 8).cyl(0, 0.08, 0, 0.36, 0.26, 0.16, bark, 'y', 8);
+        s.cyl(0, 1.45, 0, 0.11, 0.02, 0.45, 0x8a7352, 'y', 5).cyl(-0.09, 1.33, 0.04, 0.07, 0, 0.26, 0x8a7352, 'y', 4).cyl(0.08, 1.3, -0.05, 0.06, 0, 0.2, 0x7a6548, 'y', 4);
+        s.beam([0.18, 1.2, 0], [0.42, 1.38, 0.05], 0.08, bark).beam([0.42, 1.38, 0.05], [0.5, 1.3, 0.2], 0.03, bark);
+        s.sphere(0.26, 0.95, 0.03, 0.16, 0.3, 0.16, 0x3f5236, 6, 4).sphere(-0.22, 0.3, 0.1, 0.24, 0.22, 0.22, 0x36482f, 6, 4).sphere(0.25, 0.22, -0.15, 0.2, 0.18, 0.2, 0x3f5236, 6, 4).sphere(-0.1, 1.02, -0.12, 0.1, 0.06, 0.1, 0x55643a, 5, 3);
+        return s;
+      };
+      const dark = out(stumpGeo(0.14), root, M.black);
+      const stump = out(stumpGeo(0.14));
+      // indizi umani, separati per poterli ritirare: testa sul moncone, spalla e braccio lungo il fianco
+      const cueRoot = new TransformNode('illusion.cue', c.scene);
+      cueRoot.parent = root;
+      cueRoot.position.set(0, 1.25, 0);
+      const cg = new Geo(hs);
+      cg.jit = 0.05;
+      cg.sphere(0, 0.37, 0, 0.13, 0.15, 0.12, 0).beam([-0.02, 0.1, 0], [0, 0.26, 0], 0.13, 0).beam([-0.24, 0.05, 0], [-0.27, -0.5, 0.02], 0.07, 0);
+      const cue = out(cg, cueRoot, M.black);
       return { root, meshes, seen: 0, glow: null, upd: () => {}, fade: (al, v) => {
         const r = v.reveal < 0 ? 0 : v.reveal > 1 ? 1 : v.reveal;
-        dark.visibility = al * (1 - r); stump.visibility = al * r;
-        dark.setEnabled(r < 0.995); stump.setEnabled(r > 0.005);
+        // la corteccia emerge lentamente (curva morbida), gli indizi si ritirano prima che il colore si veda
+        const lit = r * r * (3 - 2 * r);
+        const k = Math.max(0, 1 - r * 1.6);
+        dark.visibility = al * (1 - lit); stump.visibility = al * lit;
+        dark.setEnabled(lit < 0.995); stump.setEnabled(lit > 0.005);
+        cueRoot.scaling.set(0.6 + 0.4 * k, k, 0.6 + 0.4 * k);
+        cue.visibility = al * (1 - lit) * Math.min(1, k * 1.5);
+        cue.setEnabled(k > 0.01);
       } };
     }
 

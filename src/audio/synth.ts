@@ -747,6 +747,10 @@ export const RECIPES: Record<SoundKind, Recipe> = {
     thud(c, out, t + dur, p, 140, 0.06, 0.25);
     return dur + 0.08;
   },
+  /** Un passo che non è il tuo: stesso terreno, appena più pesante. */
+  mimic_step(c, out, t, p) {
+    return footstepRecipe(c, out, t, p, 'dirt', false, p.rng.next() < 0.5);
+  },
   report_sent(c, out, t, p) {
     nz(c, out, t, p, { dur: 0.28, peak: 0.25, attack: 0.12, type: 'bandpass', f: 600, f2: 3200, q: 2 });
     tn(c, out, t + 0.24, { f: 659.3 * p.pitch, dur: 0.3, peak: 0.4 });
@@ -877,7 +881,38 @@ function isParam(x: AudioNode | AudioParam): x is AudioParam {
 
 export type LoopBuilder = (c: Ctx, out: AudioNode, p: RecipeParams) => LoopHandle;
 
+/** Respiro del personaggio: inspirazione ed espirazione di rumore filtrato, programmate a ogni ciclo. */
+function breathLoop(cycle: number, depth: number): LoopBuilder {
+  return (c, out, p) => {
+    const s = new Sources();
+    const g = gn(c, 0, out);
+    const tone = bq(c, 'bandpass', 1100, 0.9, g);
+    s.noise(c, p, p.noise.pink, bq(c, 'highpass', 300, 0.5, tone));
+    let next = c.currentTime + 0.1;
+    return { stop: (t) => s.stop(t), tick(t) {
+      if (t < next - 0.05) return;
+      const at = Math.max(t, next);
+      const len = cycle * (0.9 + 0.2 * p.rng.next());
+      const inh = len * 0.38, exh = len * 0.42;
+      const gp = g.gain;
+      gp.cancelScheduledValues(at);
+      gp.setValueAtTime(0.0001, at);
+      // inspirazione: più sottile e acuta
+      gp.linearRampToValueAtTime(depth * 0.6, at + inh * 0.55);
+      gp.linearRampToValueAtTime(0.0001, at + inh);
+      tone.frequency.setValueAtTime(1500, at);
+      tone.frequency.setValueAtTime(900, at + inh);
+      // espirazione: più piena e grave
+      gp.linearRampToValueAtTime(depth, at + inh + exh * 0.25);
+      gp.linearRampToValueAtTime(0.0001, at + inh + exh);
+      next = at + len;
+    } };
+  };
+}
+
 export const LOOPS: Record<LoopKind, LoopBuilder> = {
+  breath_calm: breathLoop(3.6, 0.5),
+  breath_fast: breathLoop(1.25, 0.8),
   mystery_music(c, out, p) {
     const s = new Sources();
     // Pedale grave, accordo minore sospeso e note di vetro rade; traccia non spaziale.

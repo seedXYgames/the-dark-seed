@@ -1,11 +1,13 @@
 // Un osservatore persistente, indipendente dagli incontri ostili del seed.
-import type { ActorState, Vec2 } from '../core/contracts';
+import { WORLD_HALF, type ActorState, type Vec2 } from '../core/contracts';
 import { streamFor } from '../core/rng';
 import { encounterSight } from './encounters';
 import type { SimHost } from './host';
 
-export const hasWatcher = (seed: number) => streamFor(seed, 'encounters').fork('watcher').chance(0.35);
+export const hasWatcher = (seed: number) => streamFor(seed, 'encounters').fork('watcher').chance(0.15);
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a.x - b.x, a.z - b.z);
+/** Più veloce della corsa del giocatore (5,8 m/s). */
+const FLEE_SPEED = 7.5;
 
 export class Watcher {
   private actor?: ActorState;
@@ -30,7 +32,7 @@ export class Watcher {
     for (let i = 0; i < 90; i++) {
       const angle = this.r.range(0, Math.PI * 2), radius = this.r.range(60, 100);
       const p = { x: pl.x + Math.sin(angle) * radius, z: pl.z + Math.cos(angle) * radius };
-      if (Math.abs(p.x) > 665 || Math.abs(p.z) > 665 || h.model.blockedAt(p.x, p.z) || h.model.indoorsAt(p.x, p.z) || h.model.waterDepthAt(p.x, p.z) > 0.05) continue;
+      if (Math.abs(p.x) > WORLD_HALF - 35 || Math.abs(p.z) > WORLD_HALF - 35 || h.model.blockedAt(p.x, p.z) || h.model.indoorsAt(p.x, p.z) || h.model.waterDepthAt(p.x, p.z) > 0.05) continue;
       if (unseen && h.playerCanSee(p, 25)) continue;
       const q = h.model.resolve(p.x, p.z, 0.35, id => h.state.objects[id]?.state === 'open');
       if (dist(p, q) > 0.15 || !encounterSight(h.model, p, pl)) continue;
@@ -39,14 +41,41 @@ export class Watcher {
     return null;
   }
 
+  /** Inquadrato: il giocatore lo guarda quasi dritto, con la linea di vista libera. */
+  private framed(a: ActorState, d: number): boolean {
+    const st = this.h.state, p = st.player;
+    if (d > 140) return false;
+    const ang = Math.atan2(a.pos.x - p.pos.x, a.pos.z - p.pos.z) - p.yaw;
+    return Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang))) < 0.42 && encounterSight(this.h.model, a.pos, p.pos);
+  }
+
   step(dt: number) {
     const a = this.actor, h = this.h, st = h.state;
     if (!a || st.ended || st.abandoned) return;
     const d = dist(a.pos, st.player.pos);
     const seen = h.playerCanSee(a.pos, 20) && encounterSight(h.model, a.pos, st.player.pos);
     a.data.moving = false;
+    // Inquadrato, scappa: corre via più veloce di quanto il giocatore possa correre. Non si raggiunge mai.
+    if (!st.player.indoors && st.time >= Number(a.data.awakeAt) && this.framed(a, d)) {
+      if (Number(a.data.fleeUntil ?? 0) <= st.time) h.emit({ type: 'watcher_flees', actorId: a.id, origin: 'anomaly', pos: a.pos, radius: 0, tags: ['watcher'] });
+      a.data.fleeUntil = st.time + 5;
+    }
+    if (Number(a.data.fleeUntil ?? 0) > st.time) {
+      a.heading = Math.atan2(a.pos.x - st.player.pos.x, a.pos.z - st.player.pos.z);
+      const step = FLEE_SPEED * dt;
+      // se un ostacolo lo blocca prova a scartare di lato
+      for (const turn of [0, 0.6, -0.6, 1.2, -1.2]) {
+        const hd = a.heading + turn;
+        const p = h.model.move(a.pos, Math.sin(hd) * step, Math.cos(hd) * step, id => st.objects[id]?.state === 'open', 0.3);
+        if (h.model.waterDepthAt(p.x, p.z) < 0.3 && dist(a.pos, p) > step * 0.5) { a.pos = p; a.heading = hd; a.data.moving = true; break; }
+      }
+      a.data.watching = false;
+      a.state = 'flee';
+      this.relocateAfter = Math.min(this.relocateAfter, st.time + 3);
+      return;
+    }
     a.heading = Math.atan2(st.player.pos.x - a.pos.x, st.player.pos.z - a.pos.z);
-    // Resta immobile quando lo si guarda; si avvicina solo mantenendo una distanza prudente.
+    // Si avvicina solo fuori campo, mantenendo una distanza prudente.
     if (!seen && d > 78 && d < 170 && !st.player.indoors) {
       const step = Math.min(a.speed * dt, d - 75);
       const p = h.model.move(a.pos, Math.sin(a.heading) * step, Math.cos(a.heading) * step, id => st.objects[id]?.state === 'open', 0.3);
@@ -54,8 +83,9 @@ export class Watcher {
     }
     if (st.time < this.nextThink) return;
     this.nextThink = st.time + 0.5;
+    // Troppo vicino (il giocatore gli è arrivato addosso di spalle): sparisce appena non è guardato.
     // Se lo si lascia indietro riappare solo fuori campo: non scompare mentre lo stai guardando.
-    if (!seen && (d > 135 || d < 40 || !encounterSight(h.model, a.pos, st.player.pos)) && st.time >= this.relocateAfter && !st.player.indoors) {
+    if (!seen && (d > 135 || d < 40 || !encounterSight(h.model, a.pos, st.player.pos)) && (st.time >= this.relocateAfter || d < 25) && !st.player.indoors) {
       this.relocateAfter = st.time + 12;
       const p = this.spot(true);
       if (p) { a.pos = p; a.data.moving = false; }

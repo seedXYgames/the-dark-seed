@@ -93,7 +93,7 @@ describe('incontri fisici', () => {
     expect(x.s.state.log.some(e => e.sound?.kind === 'alien_call')).toBe(true);
     expect(x.members.every(a => !a.present)).toBe(true);
   });
-  it('il cono della torcia ha metà raggio alla stessa distanza', () => {
-    expect(Math.tan(TORCH_ANGLE / 2) / Math.tan(1.16 / 2)).toBeCloseTo(0.5, 10);
+  it('il cono della torcia è un poco più stretto di metà raggio', () => {
+    expect(Math.tan(TORCH_ANGLE / 2) / Math.tan(1.16 / 2)).toBeCloseTo(1 / 2.2, 10);
   });
 });

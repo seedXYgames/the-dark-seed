@@ -10,15 +10,9 @@ export const LIMITS = {
   drawDistance: { min: 200, max: 700, step: 10 },
 } as const;
 
-const QUALITIES: readonly GraphicsSettings['quality'][] = ['low', 'medium', 'high'];
-
 function num(v: unknown, lo: number, hi: number, def: number): number {
   if (typeof v !== 'number' || !Number.isFinite(v)) return def;
   return v < lo ? lo : v > hi ? hi : v;
-}
-
-function bool(v: unknown, def: boolean): boolean {
-  return typeof v === 'boolean' ? v : def;
 }
 
 /** Lingua predefinita dal browser: 'it*' → italiano, altrimenti inglese. */
@@ -41,19 +35,13 @@ export function sanitizeSettings(raw: unknown, fallbackLang: Lang = DEFAULT_SETT
   const o = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const g = o.gfx !== null && typeof o.gfx === 'object' && !Array.isArray(o.gfx) ? (o.gfx as Record<string, unknown>) : {};
   const lang: Lang = o.lang === 'it' || o.lang === 'en' ? o.lang : fallbackLang;
-  const quality = QUALITIES.includes(g.quality as GraphicsSettings['quality'])
-    ? (g.quality as GraphicsSettings['quality'])
-    : d.gfx.quality;
+  // Solo lingua e luminosità sono regolabili: tutto il resto è sempre al massimo, anche se in memoria
+  // c'erano valori salvati da versioni precedenti.
   return {
     lang,
     gfx: {
+      ...d.gfx,
       brightness: num(g.brightness, LIMITS.brightness.min, LIMITS.brightness.max, d.gfx.brightness),
-      quality,
-      renderScale: num(g.renderScale, LIMITS.renderScale.min, LIMITS.renderScale.max, d.gfx.renderScale),
-      shadows: bool(g.shadows, d.gfx.shadows),
-      antialias: bool(g.antialias, d.gfx.antialias),
-      drawDistance: Math.round(num(g.drawDistance, LIMITS.drawDistance.min, LIMITS.drawDistance.max, d.gfx.drawDistance)),
-      fogEffects: bool(g.fogEffects, d.gfx.fogEffects),
     },
   };
 }

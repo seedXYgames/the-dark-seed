@@ -11,9 +11,11 @@ import type { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { AudioEngine } from './audio/engine';
 import { SilencePlanner, computeSoundscape } from './audio/soundscape';
 import { Tts } from './audio/tts';
+import { NeuralTts } from './audio/neuralTts';
 import type { ExtremeRenderState, PhoneTab, UiCallbacks } from './core/api';
 import type { Settings } from './core/contracts';
-import { clamp } from './core/rng';
+import { Rng, clamp } from './core/rng';
+import { clockString } from './sim/environment';
 import { EYE_HEIGHT, GameSession, type PlayerInput } from './game/session';
 import { t } from './i18n/strings';
 import { EnvironmentRenderer } from './render/environment';
@@ -26,9 +28,11 @@ import { Ui } from './ui/ui';
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const root = document.getElementById('ui-root') as HTMLElement;
 const engine = new Engine(canvas, false, { preserveDrawingBuffer: false, stencil: false, powerPreference: 'high-performance' }, false);
+let lastNav = 0;
 let settings: Settings = loadSettings();
 const audio = new AudioEngine();
-const tts = new Tts();
+// voce neurale offline del narratore; la voce del browser resta come riserva
+const tts = new NeuralTts(new Tts(), () => audio.voiceOutput());
 
 interface View {
   scene: Scene; camera: UniversalCamera; env: EnvironmentRenderer; objs: WorldObjectsRenderer; session: GameSession; silence: SilencePlanner;
@@ -79,6 +83,17 @@ function disposeView() {
   view = null;
 }
 
+// I browser non lasciano partire l'audio prima del primo gesto dell'utente: il primo clic o tasto
+// qualsiasi (non solo sui pulsanti) accende subito il suono del menu.
+const AUDIO_GESTURES = ['pointerdown', 'keydown', 'touchend'] as const;
+function unlockAudio() {
+  void audio.resume();
+  for (const ev of AUDIO_GESTURES) window.removeEventListener(ev, unlockAudio, true);
+}
+for (const ev of AUDIO_GESTURES) window.addEventListener(ev, unlockAudio, true);
+// alcuni browser lo permettono già senza gesto (sito usato spesso, o autoplay consentito): si prova subito
+void audio.resume();
+
 function later(fn: () => void) { requestAnimationFrame(() => setTimeout(fn, 30)); }
 
 function showMenu() {
@@ -106,6 +121,7 @@ function startGame(seed: number) {
   ui.show('loading');
   ui.setLoadingProgress(0.15);
   void audio.resume();
+  tts.preload(L());
   later(() => {
     disposeView();
     ui.setLoadingProgress(0.5);
@@ -219,13 +235,28 @@ window.addEventListener('keydown', (e) => {
     case 'KeyE': doInteract(); break;
     case 'KeyF': if (!inspect) view.session.toggleTorch(); break;
     case 'KeyT': openPhone(); break;
-    case 'KeyM': openPhone('map'); break;
+    case 'KeyM': if (!inspect) { ui.setNavigator(!ui.isNavigatorOn()); lastNav = 0; } break;
     case 'KeyC': if (!inspect) pendingPhoto = true; break;
     default: break;
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => { keys.clear(); zooming = false; });
+// telefono aperto: si guarda intorno trascinando col mouse sulla scena (il puntatore serve al telefono)
+let dragLook = false;
+// fotocamera del telefono: il mouse gira lo sguardo come nel gioco normale (puntatore bloccato), clic = scatto
+let camLook = false;
+let camLookDeclined = false;
+const onPhoneUi = (t: EventTarget | null): boolean => t instanceof Element && !!t.closest('.tds-phone, button, input, textarea, a');
+window.addEventListener('mousedown', (e) => {
+  if (mode !== 'game' || paused || !ui.isPhoneOpen() || onPhoneUi(e.target)) return;
+  if (ui.phoneViewfinder()) {
+    if (document.pointerLockElement === canvas) { if (e.button === 0) pendingPhoto = true; }
+    else { camLookDeclined = false; camLook = true; lockPointer(); }
+    return;
+  }
+  if (e.button === 0 || e.button === 2) { dragLook = true; canvas.style.cursor = 'grabbing'; }
+});
 canvas.addEventListener('mousedown', (e) => {
   if (mode !== 'game' || paused || ui.isPhoneOpen()) return;
   void audio.resume();
@@ -234,9 +265,15 @@ canvas.addEventListener('mousedown', (e) => {
   if (e.button === 2 && !inspect) zooming = true;
 });
 // tasto destro: zoom per guardare lontano (come stringere gli occhi o un binocolo tascabile)
-window.addEventListener('mouseup', (e) => { if (e.button === 2) zooming = false; });
+window.addEventListener('mouseup', (e) => { if (e.button === 2) zooming = false; if (dragLook) { dragLook = false; canvas.style.cursor = ''; } });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('mousemove', (e) => {
+  if (dragLook && mode === 'game' && !paused && ui.isPhoneOpen()) {
+    const s = 0.0032 * (view ? view.camera.fov / BASE_FOV : 1);
+    yaw += e.movementX * s;
+    pitch = clamp(pitch + e.movementY * s, -1.45, 1.45);
+    return;
+  }
   if (mode !== 'game' || document.pointerLockElement !== canvas) return;
   if (inspect) { inspect.rx += e.movementX * 0.008; inspect.ry = clamp(inspect.ry + e.movementY * 0.008, -1.5, 1.5); return; }
   const sens = 0.0022 * (view ? view.camera.fov / BASE_FOV : 1); // più lento quando si zooma
@@ -247,6 +284,7 @@ canvas.addEventListener('wheel', (e) => { if (inspect) { inspect.dist = clamp(in
 document.addEventListener('pointerlockchange', () => {
   if (mode !== 'game' || !view) return;
   if (document.pointerLockElement === canvas) return;
+  if (camLook) { camLook = false; camLookDeclined = true; } // Esc in fotocamera: torna il cursore, il telefono resta aperto
   // blocco perso senza che lo volessimo (Esc o cambio finestra): pausa
   if (wantLock && !ui.isPhoneOpen() && !view.session.state.ended) { paused = true; wantLock = false; endInspect(); ui.show('pause'); tts.cancel(); }
 });
@@ -261,8 +299,17 @@ function capturePhoto(v: View) {
   v.scene.onAfterRenderObservable.addOnce(() => {
     try {
       const c = document.createElement('canvas');
-      c.width = 480; c.height = Math.round((480 * canvas.height) / Math.max(1, canvas.width));
-      c.getContext('2d')!.drawImage(canvas, 0, 0, c.width, c.height);
+      const f = ui.phoneViewfinder();
+      if (f && f.width > 0 && f.height > 0) {
+        // dal telefono: la foto è esattamente l'inquadratura del mirino, in verticale come una fotocamera vera
+        const cr = finderCrop(f.width / f.height);
+        c.height = 480; c.width = Math.round((480 * f.width) / f.height);
+        c.getContext('2d')!.drawImage(canvas, cr.sx, cr.sy, cr.sw, cr.sh, 0, 0, c.width, c.height);
+      } else {
+        c.width = 480; c.height = Math.round((480 * canvas.height) / Math.max(1, canvas.width));
+        c.getContext('2d')!.drawImage(canvas, 0, 0, c.width, c.height);
+      }
+      maybeGhost(c, v);
       v.session.addPhoto(c.toDataURL('image/jpeg', 0.72), subjects);
       ui.setScreenEffect('flash', 0.6);
     } finally {
@@ -270,6 +317,43 @@ function capturePhoto(v: View) {
       refreshPhone(true);
     }
   });
+}
+
+/**
+ * A volte nella foto c'è qualcosa che dal vivo non c'era: una sagoma scura e sfocata vicino al bordo,
+ * mezza fuori dall'inquadratura. Più probabile quando succedono cose strane. Deterministico per seed e foto.
+ */
+function maybeGhost(c: HTMLCanvasElement, v: View) {
+  const st = v.session.state;
+  const n = st.photos.length + 1;
+  const r = new Rng(`ghost/${v.session.spec.seed}/${n}`);
+  const mood = v.session.sim.mysteryMood();
+  const chance = 0.1 + 0.25 * mood.intensity + (mood.watched ? 0.15 : 0);
+  if (n < 2 || r.next() > chance) return;
+  const g = c.getContext('2d');
+  if (!g) return;
+  const W = c.width, H = c.height;
+  const hgt = H * (0.22 + 0.25 * r.next());
+  const left = r.next() < 0.5;
+  // vicino a un bordo, a volte tagliata fuori
+  const cx = left ? W * (0.02 + 0.12 * r.next()) : W * (0.86 + 0.12 * r.next());
+  const base = H * (0.55 + 0.3 * r.next());
+  const w = hgt * 0.28;
+  g.save();
+  g.filter = `blur(${(2 + 3 * r.next()).toFixed(1)}px)`;
+  g.globalAlpha = 0.35 + 0.25 * r.next();
+  g.fillStyle = '#050505';
+  g.beginPath();
+  // testa
+  g.ellipse(cx, base - hgt * 0.9, w * 0.32, w * 0.4, 0, 0, Math.PI * 2);
+  // spalle e corpo: si assottigliano verso il basso e sfumano
+  g.moveTo(cx - w * 0.55, base - hgt * 0.74);
+  g.quadraticCurveTo(cx, base - hgt * 0.82, cx + w * 0.55, base - hgt * 0.74);
+  g.lineTo(cx + w * 0.4, base);
+  g.lineTo(cx - w * 0.4, base);
+  g.closePath();
+  g.fill();
+  g.restore();
 }
 
 // ---------------------------------------------------------------- ciclo
@@ -340,6 +424,20 @@ function gameFrame(v: View, dt: number) {
     for (const l of loops) { seen.add(l.id); loopIds.add(l.id); audio.setLoop(l.id, l.kind, l.pos, l.gain); }
     const wd = ctx.waterDistance;
     if (wd < 80) { seen.add('water'); loopIds.add('water'); audio.setLoop('water', 'water', { x: p.pos.x, y: p.y, z: p.pos.z }, clamp(1 - wd / 80, 0, 1) * 0.6); }
+    // respiro: si sente nel silenzio, quando qualcosa ti osserva e dopo una corsa
+    const walking = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => keys.has(k));
+    const running = walking && (keys.has('ShiftLeft') || keys.has('ShiftRight')) && !paused && !inspect;
+    const step = Math.min(0.5, dt * 6);
+    exert = clamp(exert + (running ? step / 9 : -step / 14), 0, 1);
+    let quiet = 0;
+    for (const hs of ctx.hushSources) if (Math.hypot(hs.pos.x - p.pos.x, hs.pos.z - p.pos.z) < hs.radius) quiet = Math.max(quiet, hs.strength);
+    const fear = Math.max(mood.watched ? 0.8 : 0, mood.intensity * 0.7, quiet);
+    const live = !paused && !st.ended && mode === 'game';
+    const fast = live ? Math.max(exert, fear > 0.75 ? (fear - 0.75) * 2.4 : 0) : 0;
+    const calm = live ? Math.max(0, Math.max(0.6 * fear, exert * 0.4) - fast) : 0;
+    for (const [id, kind, g] of [['breath-calm', 'breath_calm', calm], ['breath-fast', 'breath_fast', fast]] as const) {
+      if (g > 0.02) { seen.add(id); loopIds.add(id); audio.setLoop(id, kind, undefined, g); }
+    }
     for (const id of [...loopIds]) if (!seen.has(id)) { audio.setLoop(id, null); loopIds.delete(id); }
   }
   const out = s.drain();
@@ -357,6 +455,7 @@ function gameFrame(v: View, dt: number) {
   if (subtitleUntil && performance.now() > subtitleUntil) { subtitleUntil = 0; ui.setSubtitle(null); }
   if (frame % 15 === 0) ui.setTorch(st.torch.charge, st.torch.on, st.torch.spares);
   refreshPhone();
+  if (ui.isNavigatorOn() && !ui.isPhoneOpen() && performance.now() - lastNav > 66) { lastNav = performance.now(); ui.updateNavigator(s.mapView(), clockString(s.sky().hour)); }
 
   if (pendingPhoto) { pendingPhoto = false; capturePhoto(v); }
 
@@ -396,7 +495,45 @@ engine.runRenderLoop(() => {
   if (mode === 'menu') menuFrame(view, dt);
   else gameFrame(view, dt);
   view.scene.render();
+  if (mode === 'game') { syncCameraLook(); drawViewfinder(); }
 });
+
+/** Ritaglio centrale della scena con le proporzioni del mirino: è anche ciò che finisce nella foto. */
+function finderCrop(aspect: number): { sx: number; sy: number; sw: number; sh: number } {
+  const W = canvas.width, H = canvas.height;
+  let sw = W, sh = W / aspect;
+  if (sh > H) { sh = H; sw = H * aspect; }
+  return { sx: (W - sw) / 2, sy: (H - sh) / 2, sw, sh };
+}
+
+/** Entrando nella fotocamera il puntatore si blocca (sguardo libero); uscendone torna il cursore. */
+function syncCameraLook() {
+  const inCam = !paused && ui.isPhoneOpen() && ui.phoneViewfinder() !== null;
+  if (inCam && !camLook && !camLookDeclined) { camLook = true; lockPointer(); }
+  else if (!inCam && camLook) {
+    camLook = false;
+    if (ui.isPhoneOpen()) unlockPointer();
+  }
+  if (!ui.isPhoneOpen()) camLookDeclined = false;
+}
+
+let lastFinder = 0;
+/** Affanno del personaggio 0..1: sale correndo, scende piano da fermo. */
+let exert = 0;
+function drawViewfinder() {
+  const f = ui.phoneViewfinder();
+  if (!f) return;
+  const now = performance.now();
+  if (now - lastFinder < 40) return; // ~25 fotogrammi al secondo bastano al mirino
+  lastFinder = now;
+  const r = f.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return;
+  const w = Math.round(Math.min(480, r.width * Math.min(2, window.devicePixelRatio || 1)));
+  const h = Math.round((w * r.height) / r.width);
+  if (f.width !== w || f.height !== h) { f.width = w; f.height = h; }
+  const c = finderCrop(w / h);
+  try { f.getContext('2d')?.drawImage(canvas, c.sx, c.sy, c.sw, c.sh, 0, 0, w, h); } catch { /* contesto perso: si riprova al prossimo fotogramma */ }
+}
 
 function exposeDev() {
   // Strumenti di sviluppo: esistono solo con `npm run dev`, mai nella build di produzione.

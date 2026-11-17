@@ -31,7 +31,23 @@ describe('osservatore e musica misteriosa', () => {
     expect(x.s.state.death).toBeUndefined(); expect(x.s.state.ended).toBe(false);
     expect(x.mood.view()).toMatchObject({ active: true, watched: true });
   });
-  it('resta immobile se lo si guarda e si riposiziona solo fuori campo', () => {
+  it('se inquadrato scappa più veloce della corsa del giocatore', () => {
+    const x = fixture(); x.step(80);
+    const pl = x.s.state.player;
+    const face = () => { pl.yaw = Math.atan2(x.a.pos.x - pl.pos.x, x.a.pos.z - pl.pos.z); };
+    face();
+    const d0 = x.s.playerDistance(x.a.pos);
+    // il giocatore gli corre incontro a 5,8 m/s per 6 secondi, sempre guardandolo
+    for (let i = 0; i < 60; i++) {
+      const dx = x.a.pos.x - pl.pos.x, dz = x.a.pos.z - pl.pos.z, n = Math.hypot(dx, dz);
+      pl.pos = { x: pl.pos.x + (dx / n) * 0.58, z: pl.pos.z + (dz / n) * 0.58 };
+      face(); x.step(0.1);
+    }
+    expect(x.a.state).toBe('flee');
+    expect(x.s.playerDistance(x.a.pos)).toBeGreaterThan(d0);
+    expect(x.s.state.log.some(e => e.type === 'watcher_flees')).toBe(true);
+  });
+  it('resta fermo se è nel campo visivo ma non inquadrato, e si riposiziona solo fuori campo', () => {
     const x = fixture(); x.seen.mockReturnValue(true);
     const pos = { ...x.a.pos };
     x.step(10); expect(x.a.pos).toEqual(pos);

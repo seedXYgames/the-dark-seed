@@ -53,6 +53,8 @@
   padding: 8px 12px; border: 1px solid rgba(217,168,92,0.35); border-radius: 3px;
   color: #e3b977; background: rgba(6,8,9,0.78); font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase;
 }
+.tds-event-why { opacity: 0.8; text-transform: none; letter-spacing: 0.02em; font-size: 0.85em; max-width: 46ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tds-event-why::before { content: '· '; }
 .tds-event-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: tds-event-pulse 1.6s ease-in-out infinite; }
 .tds-ui.is-phone-open .tds-event { right: calc(var(--phone-w) + 44px); }
 @keyframes tds-event-pulse { 0%,100% { opacity: 1; box-shadow: 0 0 9px rgba(227,185,119,0.5); } 50% { opacity: 0.18; box-shadow: none; } }
@@ -214,7 +216,10 @@
 
 /* fotocamera e galleria */
 .tds-pane-camera { display: flex; flex-direction: column; gap: 12px; }
-.tds-cam-frame { position: relative; flex: 1; min-height: 120px; border-radius: 8px; background: rgba(255, 255, 255, 0.025); display: flex; align-items: center; justify-content: center; padding: 26px; }
+.tds-cam-frame { position: relative; flex: 1; min-height: 120px; border-radius: 8px; background: #050607; display: flex; align-items: flex-end; justify-content: center; padding: 26px 26px 14px; overflow: hidden; }
+.tds-cam-live { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tds-cam-frame .tds-cam-hint { position: relative; padding: 4px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.45); color: rgba(255, 255, 255, 0.78); font-size: 12px; }
+.tds-cam-frame .tds-cam-corner { border-color: rgba(255, 255, 255, 0.7); z-index: 1; }
 .tds-cam-frame.is-shot { animation: tds-shot 0.28s ease-out; }
 @keyframes tds-shot { from { background: rgba(255, 255, 255, 0.75); } to { background: rgba(255, 255, 255, 0.025); } }
 .tds-cam-corner { position: absolute; width: 18px; height: 18px; border: 0 solid var(--ink-faint); }
@@ -410,3 +415,27 @@
 .tds-exit { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; z-index: 5; }
 .tds-exit[hidden] { display: none; }
 .tds-exit-text { font-family: var(--serif); font-size: clamp(18px, 2.2vw, 26px); letter-spacing: 0.06em; color: var(--ink); text-align: center; padding: 0 24px; }
+
+/* ---------------------------------------------------------------- navigatore (M): telefono in mano sulla mappa */
+.tds-nav {
+  position: absolute; right: 22px; bottom: 46px; width: min(250px, 30vw); height: min(330px, 44vh); padding: 7px;
+  border-radius: 26px; background: #0a0b0d; border: 1px solid #23272a; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
+  pointer-events: none; animation: tds-phone-in 0.22s ease both; opacity: 0.96;
+}
+.tds-nav-screen { height: 100%; display: flex; flex-direction: column; overflow: hidden; border-radius: 20px; background: #0f1214; }
+.tds-nav-bar {
+  flex: none; height: 22px; padding: 0 13px; display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink); background: #0b0d0f;
+}
+.tds-nav-clock { font-weight: 600; }
+.tds-nav-key { font-size: 10px; color: var(--ink-faint); border: 1px solid #2c3235; border-radius: 3px; padding: 0 4px; line-height: 14px; }
+.tds-nav-map { flex: 1; min-height: 0; width: 100%; display: block; }
+.tds-ui.is-phone-open .tds-nav { display: none; }
+.tds-ui.is-nav-on .tds-corner { bottom: calc(min(330px, 44vh) + 58px); }
+/* segnalino del rapporto nella lista incarichi, uguale a quello della mappa */
+.tds-task-pin {
+  display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 7px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; color: #f4efe2; background: #b3352a; vertical-align: 1px;
+}
+.tds-task-pin.is-inspected { background: #c98a1c; }
+.tds-task-pin.is-reported { background: #3f7d4a; }

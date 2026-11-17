@@ -730,22 +730,39 @@ export class GameSession implements SimHost {
 
   // ---------------------------------------------------------------- viste
 
+  private mapStatic: { lang: string; edges: MapView['edges']; pois: MapView['pois'] } | null = null;
+
+  /** Mappa per il telefono e per il navigatore: parti fisse in cache, giocatore e segnalini aggiornati. */
+  mapView(): MapView {
+    const st = this.state, lang = st.lang;
+    if (!this.mapStatic || this.mapStatic.lang !== lang) {
+      this.mapStatic = {
+        lang, edges: this.spec.edges.map((e) => ({ kind: e.kind, points: e.points })),
+        pois: this.spec.pois.filter((p) => p.type !== 'bridge').map((p) => ({ name: p.name[lang], type: p.type, pos: p.pos })),
+      };
+    }
+    const t = this.spec.terrain;
+    return {
+      size: this.spec.size, edges: this.mapStatic.edges, pois: this.mapStatic.pois,
+      lake: t.lake ? { center: t.lake.center, radius: t.lake.radius } : undefined, river: t.river?.points, car: this.spec.carSpawn.pos,
+      player: { pos: st.player.pos, yaw: st.player.yaw }, glitch: this.sim.interference().gps,
+      targets: st.missions.map((m, i) => {
+        const p = this.pose(m.targetObjectId) ?? this.model.poi(m.poiId)?.pos ?? { x: 0, z: 0 };
+        return { n: i + 1, pos: { x: p.x, z: p.z }, state: m.state };
+      }),
+    };
+  }
+
   phoneView(): PhoneView {
     const st = this.state;
     const lang = st.lang;
     const inter = this.sim.interference();
     const base = 2 + Math.round(hash2(Math.round(st.player.pos.x / 120), Math.round(st.player.pos.z / 120), this.spec.seed) * 2);
-    const t = this.spec.terrain;
-    const map: MapView = {
-      size: this.spec.size, edges: this.spec.edges.map((e) => ({ kind: e.kind, points: e.points })),
-      pois: this.spec.pois.filter((p) => p.type !== 'bridge').map((p) => ({ name: p.name[lang], type: p.type, pos: p.pos })),
-      lake: t.lake ? { center: t.lake.center, radius: t.lake.radius } : undefined, river: t.river?.points, car: this.spec.carSpawn.pos,
-      player: { pos: st.player.pos, yaw: st.player.yaw }, glitch: inter.gps,
-    };
+    const map = this.mapView();
     return {
       clock: clockString(this.cachedSky.hour), signal: clamp(Math.round(base * (1 - inter.phone)), 0, 4), torchCharge: st.torch.charge, torchSpares: st.torch.spares,
       messages: st.messages, photos: st.photos, maxPhotos: MAX_PHOTOS, reports: st.reports, map, allReported: this.allReported(),
-      missions: st.missions.map((m) => ({ id: m.id, title: m.text[lang], place: this.model.poi(m.poiId)?.name[lang] ?? '', state: m.state, canReport: m.state === 'inspected' })),
+      missions: st.missions.map((m, i) => ({ id: m.id, n: i + 1, title: m.text[lang], place: this.model.poi(m.poiId)?.name[lang] ?? '', state: m.state, canReport: m.state === 'inspected' })),
     };
   }
 

@@ -1,12 +1,16 @@
 // Interfaccia DOM di The Dark Seed: schermate, HUD, telefono, didascalia d'ispezione ed effetti
 // a schermo intero, sovrapposti al canvas WebGL. L'interfaccia non chiede mai il pointer lock.
 import './ui.css';
-import type { IUi, MysteryMood, PhoneTab, PhoneView, ScreenId, SummaryView, UiCallbacks } from '../core/api';
+import type { IUi, MapView, MysteryMood, PhoneTab, PhoneView, ScreenId, SummaryView, UiCallbacks } from '../core/api';
 import type { Lang, Settings } from '../core/contracts';
 import { t } from '../i18n/strings';
 import { ScreenEffects } from './effects';
 import { Phone } from './phone';
+import { drawMap } from './map';
 import { Screens, applyI18n, el, i18nAria } from './screens';
+
+/** Fase di sviluppo: accanto a "Evento insolito" si mostra la causa tecnica. Mettere false per la versione finale. */
+const DEBUG_EVENT_REASON = true;
 import { sanitizeSettings, saveSettings } from './settingsStore';
 
 const NOTICE_MS = 4000;
@@ -27,6 +31,7 @@ export class Ui implements IUi {
   private readonly hud: HTMLElement;
   private readonly mysteryEl: HTMLElement;
   private readonly mysteryLabel: HTMLElement;
+  private readonly mysteryReason: HTMLElement;
   private readonly promptEl: HTMLElement;
   private readonly subtitleEl: HTMLElement;
   private readonly subSpeaker: HTMLElement;
@@ -51,6 +56,11 @@ export class Ui implements IUi {
   private readonly noticeQueue: string[] = [];
   private noticeActive = 0;
   private phoneOpenedAt = -1e9;
+  // navigatore: il telefono resta in mano sulla mappa mentre si cammina
+  private readonly navEl: HTMLElement;
+  private readonly navCanvas: HTMLCanvasElement;
+  private readonly navClock: HTMLElement;
+  private navOn = false;
   private readonly onKeyDown: (ev: KeyboardEvent) => void;
   private readonly onClick: (ev: MouseEvent) => void;
 
@@ -73,7 +83,8 @@ export class Ui implements IUi {
     this.mysteryEl.setAttribute('role', 'status');
     const eventDot = el('span', 'tds-event-dot'); eventDot.setAttribute('aria-hidden', 'true');
     this.mysteryLabel = el('span');
-    this.mysteryEl.append(eventDot, this.mysteryLabel);
+    this.mysteryReason = el('span', 'tds-event-why');
+    this.mysteryEl.append(eventDot, this.mysteryLabel, this.mysteryReason);
     this.hud.appendChild(this.mysteryEl);
     const dot = el('div', 'tds-dot');
     dot.setAttribute('aria-hidden', 'true');
@@ -123,7 +134,19 @@ export class Ui implements IUi {
     this.torchEl.append(batt, this.torchSpares);
     corner.append(this.unreadEl, this.torchEl);
 
-    this.hud.append(dot, this.promptEl, bottom, this.noticesEl, this.hintsEl, corner);
+    this.navEl = el('div', 'tds-nav');
+    this.navEl.hidden = true;
+    this.navEl.setAttribute('aria-hidden', 'true');
+    const navScreen = el('div', 'tds-nav-screen');
+    const navBar = el('div', 'tds-nav-bar');
+    this.navClock = el('span', 'tds-nav-clock');
+    const navKey = el('span', 'tds-nav-key', 'M');
+    navBar.append(this.navClock, navKey);
+    this.navCanvas = el('canvas', 'tds-nav-map');
+    navScreen.append(navBar, this.navCanvas);
+    this.navEl.appendChild(navScreen);
+
+    this.hud.append(dot, this.promptEl, bottom, this.noticesEl, this.hintsEl, corner, this.navEl);
 
     // ---- telefono e schermate
     this.phone = new Phone(callbacks, () => this.settings.lang, () => this.userClosePhone());
@@ -206,7 +229,7 @@ export class Ui implements IUi {
       // fuori dal turno: telefono chiuso e stato dell'HUD azzerato
       this.phone.hide();
       this.root.classList.remove('is-phone-open');
-      if (screen !== 'summary') this.resetHud();
+      if (screen !== 'summary') { this.resetHud(); this.setNavigator(false); }
     }
     this.phone.el.classList.toggle('is-suspended', !inGame);
     this.screens.show(screen);
@@ -335,6 +358,35 @@ export class Ui implements IUi {
     this.unreadEl.setAttribute('aria-label', t(this.settings.lang, 'hud.unread', { n }));
   }
 
+  // ------------------------------------------------------------ navigatore
+
+  setNavigator(on: boolean): void {
+    this.navOn = on;
+    this.navEl.hidden = !on;
+    this.root.classList.toggle('is-nav-on', on);
+  }
+
+  isNavigatorOn(): boolean {
+    return this.navOn;
+  }
+
+  /** Ridisegna il navigatore: mappa centrata sul giocatore, nord in alto, segnalini dei rapporti. */
+  updateNavigator(map: MapView, clock: string): void {
+    if (!this.navOn || this.phone.isOpen()) return;
+    const c = this.navCanvas;
+    const w = Math.max(80, c.clientWidth), h = Math.max(80, c.clientHeight);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    if (this.navClock.textContent !== clock) this.navClock.textContent = clock;
+    const lang = this.settings.lang;
+    drawMap(ctx, map, pw, ph, {
+      car: t(lang, 'phone.map.car'), north: t(lang, 'phone.map.north'), scale: t(lang, 'phone.map.scale', { n: 100 }), weak: t(lang, 'phone.map.weak'),
+    }, performance.now() / 1000, { follow: { span: 300 } });
+  }
+
   // ------------------------------------------------------------ telefono
 
   openPhone(tab?: PhoneTab): void {
@@ -347,6 +399,11 @@ export class Ui implements IUi {
   closePhone(): void {
     this.phone.hide();
     this.root.classList.remove('is-phone-open');
+  }
+
+  /** Mirino della fotocamera del telefono (null se non è sullo schermo). */
+  phoneViewfinder(): HTMLCanvasElement | null {
+    return this.phone.viewfinder();
   }
 
   isPhoneOpen(): boolean {
@@ -390,6 +447,9 @@ export class Ui implements IUi {
       this.mysteryLabel.dataset.i18n = key;
       this.mysteryLabel.textContent = t(this.settings.lang, key);
     }
+    const why = DEBUG_EVENT_REASON && mood.active ? mood.debugReason ?? '' : '';
+    if (this.mysteryReason.textContent !== why) this.mysteryReason.textContent = why;
+    this.mysteryReason.hidden = !why;
   }
 
   setScreenEffect(kind: 'none' | 'code_rain' | 'white' | 'static' | 'flash', intensity: number): void {

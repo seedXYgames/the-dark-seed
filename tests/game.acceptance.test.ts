@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEED_MAX } from '../src/core/contracts';
+import { SEED_MAX, WORLD_HALF, WORLD_SIZE } from '../src/core/contracts';
 import { parseSeed } from '../src/core/seed';
 import { Bot } from '../src/game/bot';
 import { GameSession, SIM_DT } from '../src/game/session';
@@ -20,8 +20,8 @@ describe('seed', () => {
     const a = generateWorld(31337, seedMysteries).spec, b = generateWorld(31337, seedMysteries).spec, c = generateWorld(31338, seedMysteries).spec;
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
     expect(JSON.stringify(c.pois)).not.toBe(JSON.stringify(a.pois));
-    expect(a.size).toBe(1400);
-    for (const p of a.pois) { expect(Math.abs(p.pos.x)).toBeLessThanOrEqual(700); expect(Math.abs(p.pos.z)).toBeLessThanOrEqual(700); }
+    expect(a.size).toBe(WORLD_SIZE);
+    for (const p of a.pois) { expect(Math.abs(p.pos.x)).toBeLessThanOrEqual(WORLD_HALF); expect(Math.abs(p.pos.z)).toBeLessThanOrEqual(WORLD_HALF); }
   });
 
   it('i seed di confine generano mondi validi', () => {

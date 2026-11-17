@@ -192,7 +192,7 @@ export interface QualityParams {
 }
 export function qualityParams(q: GraphicsSettings['quality']): QualityParams {
   if (q === 'low') return { nearDist: 60, rockDist: 260, coverRadius: 12, coverCell: 2.2, rain: 1400, snow: 900, debris: 60, motes: 80, shadowMap: 1024, shadowRange: 60, lodInterval: 0.4 };
-  if (q === 'high') return { nearDist: 135, rockDist: 520, coverRadius: 26, coverCell: 1.5, rain: 6000, snow: 4000, debris: 220, motes: 260, shadowMap: 2048, shadowRange: 90, lodInterval: 0.2 };
+  if (q === 'high') return { nearDist: 135, rockDist: 520, coverRadius: 110, coverCell: 1.5, rain: 6000, snow: 4000, debris: 220, motes: 260, shadowMap: 2048, shadowRange: 90, lodInterval: 0.2 };
   return { nearDist: 95, rockDist: 380, coverRadius: 19, coverCell: 1.8, rain: 3500, snow: 2400, debris: 140, motes: 160, shadowMap: 2048, shadowRange: 75, lodInterval: 0.25 };
 }
 

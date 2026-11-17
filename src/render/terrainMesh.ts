@@ -12,12 +12,16 @@ import type { Material } from '@babylonjs/core/Materials/material';
 import type { UniformBuffer } from '@babylonjs/core/Materials/uniformBuffer';
 import type { MaterialDefines } from '@babylonjs/core/Materials/materialDefines';
 import { fbm2, hash2, valueNoise2 } from '../core/rng';
+import { WORLD_HALF } from '../core/contracts';
 import { GRID_MAX, GRID_MIN, GRID_N, GRID_STEP, distToSegment } from '../world/terrain';
 import { MASK_N, MASK_STEP, type WorldModel } from '../world/model';
 import { clamp01, mix, sstep } from './envMath';
+import { TORCH_COLOR, TORCH_PROFILE_GLSL, TORCH_RANGE } from '../core/torch';
 
 /** Stato condiviso da tutti i materiali dell'ambiente (aggiornato una volta per frame). */
-export const envShared = { snow: 0, wet: 0, strip: 0, windX: 0, windZ: 0, time: 0 };
+export const envShared = { snow: 0, wet: 0, strip: 0, windX: 0, windZ: 0, time: 0,
+  /** Torcia in coordinate mondo: posizione + livello 0..1, direzione. */
+  torchP: [0, 0, 0, 0] as [number, number, number, number], torchD: [0, 0, 1] as [number, number, number] };
 
 export class EnvMaterialPlugin extends MaterialPluginBase {
   /** Soglia della normale oltre cui si deposita la neve. */
@@ -32,13 +36,17 @@ export class EnvMaterialPlugin extends MaterialPluginBase {
   override prepareDefines(defines: MaterialDefines): void { (defines as unknown as Record<string, boolean>).TDSENV = true; }
   override getUniforms() {
     return {
-      ubo: [{ name: 'tdsEnv', size: 4, type: 'vec4' }, { name: 'tdsWind', size: 4, type: 'vec4' }],
-      fragment: '#ifdef TDSENV\nuniform vec4 tdsEnv;\n#endif\n', vertex: '#ifdef TDSENV\nuniform vec4 tdsWind;\n#endif\n',
+      ubo: [{ name: 'tdsEnv', size: 4, type: 'vec4' }, { name: 'tdsWind', size: 4, type: 'vec4' },
+        { name: 'tdsTorchP', size: 4, type: 'vec4' }, { name: 'tdsTorchD', size: 4, type: 'vec4' }],
+      fragment: '#ifdef TDSENV\nuniform vec4 tdsEnv;\nuniform vec4 tdsTorchP;\nuniform vec4 tdsTorchD;\n#endif\n', vertex: '#ifdef TDSENV\nuniform vec4 tdsWind;\n#endif\n',
     };
   }
   override bindForSubMesh(ubo: UniformBuffer): void {
     ubo.updateFloat4('tdsEnv', envShared.snow, envShared.wet, envShared.strip, this.snowThreshold);
     ubo.updateFloat4('tdsWind', envShared.windX, envShared.windZ, envShared.time, this.sway);
+    const tp = envShared.torchP, td = envShared.torchD;
+    ubo.updateFloat4('tdsTorchP', tp[0], tp[1], tp[2], tp[3]);
+    ubo.updateFloat4('tdsTorchD', td[0], td[1], td[2], 0);
   }
   override getCustomCode(shaderType: string): { [pointName: string]: string } | null {
     if (shaderType === 'vertex') return {
@@ -60,6 +68,11 @@ if(tdsWind.w>0.0){
     };
     if (shaderType !== 'fragment') return null;
     return {
+      CUSTOM_FRAGMENT_DEFINITIONS: '#ifdef TDSENV\n' + TORCH_PROFILE_GLSL.replace(/tdsTorchMask/g, 'tdsEnvTorchMask') + '\n#endif\n',
+      CUSTOM_FRAGMENT_BEFORE_FOG: `
+#ifdef TDSENV
+vec3 tdsPreFog=color.rgb;
+#endif`,
       CUSTOM_FRAGMENT_UPDATE_DIFFUSE: `
 #ifdef TDSENV
 float tdsSnowM=tdsEnv.x*smoothstep(tdsEnv.w,tdsEnv.w+0.3,normalW.y);
@@ -67,6 +80,14 @@ baseColor.rgb=mix(baseColor.rgb*(1.0-0.38*tdsEnv.y),vec3(0.80,0.85,0.93),tdsSnow
 #endif`,
       CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
 #ifdef TDSENV
+// Fascio lontano: l'occhio si adatta alla luce della torcia, quindi in fondo al fascio il suolo e gli
+// alberi restano leggibili. Dentro il cono la nebbia si dirada (la luce attraversa l'aria) e si aggiunge
+// un riempimento che cresce con la distanza, dove l'attenuazione e l'angolo radente la spegnerebbero.
+vec3 tdsTV=vPositionW-tdsTorchP.xyz;
+float tdsTd=length(tdsTV);
+float tdsTm=tdsEnvTorchMask(tdsTV,tdsTorchD.xyz)*tdsTorchP.w*max(0.0,1.0-pow(tdsTd/${TORCH_RANGE}.0,2.0));
+vec3 tdsFill=baseColor.rgb*vec3(${TORCH_COLOR.map((c) => c.toFixed(3)).join(',')})*(0.18+0.6*smoothstep(4.0,30.0,tdsTd));
+color.rgb=mix(color.rgb,tdsPreFog+tdsFill*tdsTm,clamp(tdsTm*0.92,0.0,1.0));
 color.rgb=mix(color.rgb,vec3(1.0),tdsEnv.z);
 #endif`,
     };
@@ -154,7 +175,7 @@ function paintGround(model: WorldModel, fields: TerrainFields): Uint8Array {
       r = mix(r, 0.20, litter); g = mix(g, 0.145, litter); b = mix(b, 0.08, litter);
       // roccia e ghiaione sui pendii e sul bordo
       const m = Math.max(Math.abs(x), Math.abs(z));
-      const rock = clamp01(sstep(0.55, 0.95, sl + (nB - 0.5) * 0.3) + sstep(0.9, 1.4, sl) * 0.5) * (m > 690 ? 0.75 : 1);
+      const rock = clamp01(sstep(0.55, 0.95, sl + (nB - 0.5) * 0.3) + sstep(0.9, 1.4, sl) * 0.5) * (m > WORLD_HALF - 10 ? 0.75 : 1);
       const rv = 0.24 + 0.16 * nA + 0.05 * (grain - 0.5);
       r = mix(r, rv * 1.02, rock); g = mix(g, rv, rock); b = mix(b, rv * 0.98, rock);
       // riva: sabbia e fango
@@ -166,13 +187,13 @@ function paintGround(model: WorldModel, fields: TerrainFields): Uint8Array {
       }
       // sentieri e strade (maschera a 2 m, interpolata)
       let pmask = 0, kind = 0;
-      if (Math.abs(x) <= 700 && Math.abs(z) <= 700) {
-        const fx = (x + 700) / MASK_STEP, fz = (z + 700) / MASK_STEP;
+      if (Math.abs(x) <= WORLD_HALF && Math.abs(z) <= WORLD_HALF) {
+        const fx = (x + WORLD_HALF) / MASK_STEP, fz = (z + WORLD_HALF) / MASK_STEP;
         const i = Math.min(MASK_N - 2, Math.floor(fx)), j = Math.min(MASK_N - 2, Math.floor(fz)), tx = fx - i, tz = fz - j, k = j * MASK_N + i;
         pmask = (pm[k] * (1 - tx) * (1 - tz) + pm[k + 1] * tx * (1 - tz) + pm[k + MASK_N] * (1 - tx) * tz + pm[k + MASK_N + 1] * tx * tz) / 255;
         kind = Math.max(pk[k], pk[k + 1], pk[k + MASK_N], pk[k + MASK_N + 1]);
       }
-      if (m > 690) {
+      if (m > WORLD_HALF - 10) {
         const d = distToSegment(x, z, road.from, road.to);
         const v = clamp01((3.7 - d) / 1.6);
         if (v > pmask) { pmask = v; kind = 2; }

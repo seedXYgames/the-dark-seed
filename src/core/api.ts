@@ -65,10 +65,14 @@ export type SoundKind =
   | 'frog' | 'splash' | 'vehicle_pass' | 'vehicle_start' | 'car_door' | 'typing' | 'paper' | 'camera' | 'sms'
   | 'battery' | 'click' | 'steps_far' | 'voice_far' | 'knock' | 'hum_anom' | 'whisper_anom' | 'tone_anom'
   | 'thunder' | 'branch_fall' | 'fire_douse' | 'ui' | 'torch_click' | 'rustle' | 'chair_scrape' | 'report_sent' | 'screech' | 'nightbird'
-  | 'alien_call' | 'bigfoot_growl' | 'cult_chant';
+  | 'alien_call' | 'bigfoot_growl' | 'cult_chant' | 'mimic_step';
 
-export type LoopKind = 'generator' | 'water' | 'fire' | 'lamp_buzz' | 'anom_drone' | 'engine_idle' | 'mystery_music';
-export interface MysteryMood { active: boolean; intensity: number; watched: boolean }
+export type LoopKind = 'generator' | 'water' | 'fire' | 'lamp_buzz' | 'anom_drone' | 'engine_idle' | 'mystery_music' | 'breath_calm' | 'breath_fast';
+export interface MysteryMood {
+  active: boolean; intensity: number; watched: boolean;
+  /** Solo sviluppo: causa tecnica dell'indicatore, mostrata accanto all'etichetta (DEBUG_EVENT_REASON in ui.ts). */
+  debugReason?: string;
+}
 export type Surface = 'grass' | 'dirt' | 'road' | 'wood' | 'snow' | 'floor' | 'wet';
 
 export interface Vec3Like { x: number; y: number; z: number }
@@ -153,6 +157,8 @@ export interface INarrativeComposer {
 
 export interface MissionView {
   id: string;
+  /** Numero del segnalino sulla mappa. */
+  n?: number;
   title: string;
   place: string;
   state: Mission['state'];
@@ -169,6 +175,8 @@ export interface MapView {
   player: { pos: Vec2; yaw: number };
   /** 0..1: disturbo del segnale di posizione. */
   glitch: number;
+  /** Luoghi dei rapporti da fare: numero d'ordine, posizione e stato. */
+  targets?: { n: number; pos: Vec2; state: 'pending' | 'inspected' | 'reported' }[];
 }
 
 export interface PhoneView {

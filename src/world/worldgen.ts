@@ -1,7 +1,7 @@
 // Generazione della WorldSpec dal seed: geografia → POI → connettività → edifici/oggetti → cielo/meteo.
 // Ogni fase usa uno stream PRNG indipendente; nessun Math.random().
 import {
-  GENERATOR_VERSION, WORLD_SIZE, type BridgeSpec, type PathEdge, type Poi, type PoiType, type PsychZone,
+  GENERATOR_VERSION, WORLD_HALF, WORLD_K, WORLD_SIZE, type BridgeSpec, type PathEdge, type Poi, type PoiType, type PsychZone,
   type SkyInit, type TerrainSpec, type Vec2, type WeatherInit, type WorldSpec,
 } from '../core/contracts';
 import { Rng, clamp, streamFor } from '../core/rng';
@@ -34,7 +34,7 @@ const h0 = (c: Ctx, x: number, z: number) => sampleGrid(c.base, x, z);
 const wd = (c: Ctx, x: number, z: number) => waterDepth(c.terrain, x, z, h0(c, x, z), c.riverLens);
 
 function siteOk(c: Ctx, pos: Vec2, radius: number, gap: number, opts: { nearWaterOk?: boolean } = {}): boolean {
-  if (Math.abs(pos.x) > 570 - radius * 0.3 || Math.abs(pos.z) > 570 - radius * 0.3) return false;
+  if (Math.abs(pos.x) > WORLD_HALF - 130 - radius * 0.3 || Math.abs(pos.z) > WORLD_HALF - 130 - radius * 0.3) return false;
   let min = Infinity, max = -Infinity;
   for (let k = 0; k < 10; k++) {
     const a = (k / 10) * Math.PI * 2;
@@ -71,7 +71,7 @@ function placePoi(c: Ctx, type: PoiType, rng: Rng, opts: { near?: Vec2; nearMax?
   for (let i = 0; i < tries; i++) {
     let pos: Vec2;
     if (opts.near) {
-      const a = rng.range(0, Math.PI * 2), d = rng.range(opts.nearMin ?? 90, opts.nearMax ?? 240);
+      const a = rng.range(0, Math.PI * 2), d = rng.range((opts.nearMin ?? 90) * WORLD_K, (opts.nearMax ?? 240) * WORLD_K);
       pos = { x: opts.near.x + Math.cos(a) * d, z: opts.near.z + Math.sin(a) * d };
     } else pos = { x: rng.range(-560, 560), z: rng.range(-560, 560) };
     const gap = i < tries * 0.6 ? opts.gap ?? 80 : (opts.gap ?? 80) * 0.6;
@@ -85,9 +85,10 @@ function placePoi(c: Ctx, type: PoiType, rng: Rng, opts: { near?: Vec2; nearMax?
 
 // ---------------------------------------------------------------- A*
 
-const AN = 139; // celle da 10 m su [-690, 690]
-const ac = (i: number) => -690 + i * 10;
-const ai = (v: number) => clamp(Math.round((v + 690) / 10), 0, AN - 1);
+const AE = WORLD_HALF - 10;
+const AN = Math.round((AE * 2) / 10) + 1; // celle da 10 m su [-AE, AE]
+const ac = (i: number) => -AE + i * 10;
+const ai = (v: number) => clamp(Math.round((v + AE) / 10), 0, AN - 1);
 
 class Heap {
   private k: number[] = [];
@@ -133,7 +134,7 @@ function buildNav(c: Ctx, heights: Float32Array): NavGrid {
     for (let i = 0; i < AN; i++) {
       const x = ac(i), z = ac(j), k = j * AN + i;
       g.h[k] = sampleGrid(heights, x, z);
-      if (Math.max(Math.abs(x), Math.abs(z)) > 655) g.blocked[k] = 1;
+      if (Math.max(Math.abs(x), Math.abs(z)) > WORLD_HALF - 45) g.blocked[k] = 1;
       const t = c.terrain;
       if (t.lake) {
         const dx = x - t.lake.center.x, dz = z - t.lake.center.z;
@@ -210,7 +211,7 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
   const side = rng.int(0, 3);
   const u = rng.range(-330, 330);
   const depth = rng.range(215, 370);
-  const edge = (uu: number, d: number): Vec2 => side === 0 ? { x: uu, z: -700 + d } : side === 1 ? { x: 700 - d, z: uu } : side === 2 ? { x: uu, z: 700 - d } : { x: -700 + d, z: uu };
+  const edge = (uu: number, d: number): Vec2 => side === 0 ? { x: uu, z: -WORLD_HALF + d } : side === 1 ? { x: WORLD_HALF - d, z: uu } : side === 2 ? { x: uu, z: WORLD_HALF - d } : { x: -WORLD_HALF + d, z: uu };
   const car = edge(u, depth);
   const uEntry = u + rng.range(-70, 70);
   const entryPos = edge(uEntry, 8);
@@ -235,17 +236,17 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
     }
     let minH = Infinity;
     const tmp: TerrainSpec = { ...terrain };
-    for (const p of pts) if (Math.abs(p.x) < 600 && Math.abs(p.z) < 600) minH = Math.min(minH, rawHeight(tmp, p.x, p.z));
+    for (const p of pts) if (Math.abs(p.x) < WORLD_HALF - 100 && Math.abs(p.z) < WORLD_HALF - 100) minH = Math.min(minH, rawHeight(tmp, p.x, p.z));
     terrain.river = { points: pts, halfWidth: rng.range(4, 6.5), levelStart: minH - 0.5, levelEnd: minH - 2.5 };
   }
   const riverLens = terrain.river ? polyLens(terrain.river.points) : undefined;
 
   // 3. lago
-  if (!simple && rng.chance(0.56)) {
+  if (!simple && rng.chance(0.68)) {
     let best: Vec2 | null = null, bh = Infinity;
     const R = rng.range(55, 105);
     for (let i = 0; i < 16; i++) {
-      const p = { x: rng.range(-420, 420), z: rng.range(-420, 420) };
+      const p = { x: rng.range(-(WORLD_HALF - 200), WORLD_HALF - 200), z: rng.range(-(WORLD_HALF - 200), WORLD_HALF - 200) };
       if (Math.hypot(p.x - car.x, p.z - car.z) < R + 150) continue;
       if (terrain.river && polylineHit(terrain.river.points, p.x, p.z, riverLens).d < R * 1.7 + 95) continue;
       const hh = rawHeight(terrain, p.x, p.z);
@@ -291,18 +292,38 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
   if (poiRng.chance(0.62)) placePoi(c, 'roadside', fr('roadside'), { near: carPos, nearMin: 140, nearMax: 460, gap: 50 });
   const nClear = poiRng.int(1, 2);
   for (let i = 0; i < nClear; i++) placePoi(c, 'clearing', fr('clearing' + i), { score: (p) => -forestField(terrain, p.x, p.z) + h0(c, p.x, p.z) * 0.01 });
-  if (terrain.lake && poiRng.chance(0.85)) {
-    const lr = fr('dock');
-    for (let i = 0; i < 24; i++) {
+  // porticcioli: uno o due sul lago, uno sul fiume
+  if (terrain.lake) {
+    const lake = terrain.lake, lr = fr('dock');
+    const nDock = lr.chance(0.35) ? 2 : 1;
+    for (let i = 0, placed = 0; i < 40 && placed < nDock; i++) {
       const a = lr.range(0, Math.PI * 2);
-      const R = lakeRadiusAt(terrain.lake, a) * 1.0 - 1.5;
-      const pos = { x: terrain.lake.center.x + Math.cos(a) * R, z: terrain.lake.center.z + Math.sin(a) * R };
+      const R = lakeRadiusAt(lake, a) * 1.0 - 1.5;
+      const pos = { x: lake.center.x + Math.cos(a) * R, z: lake.center.z + Math.sin(a) * R };
       const back = { x: pos.x + Math.cos(a) * 14, z: pos.z + Math.sin(a) * 14 };
-      if (Math.abs(back.x) > 560 || Math.abs(back.z) > 560) continue;
+      if (Math.abs(back.x) > WORLD_HALF - 140 || Math.abs(back.z) > WORLD_HALF - 140) continue;
       if (c.pois.some((p) => Math.hypot(p.pos.x - back.x, p.pos.z - back.z) < p.radius + 50)) continue;
       // centro del POI a riva, molo verso il centro del lago
       const poi = addPoi(c, 'lake_dock', back, Math.atan2(-Math.cos(a), -Math.sin(a)));
-      poi.baseHeight = terrain.lake.level + 0.55;
+      poi.baseHeight = lake.level + 0.55;
+      placed++;
+    }
+  }
+  if (terrain.river && riverLens && poiRng.chance(0.8)) {
+    const river = terrain.river, rr = fr('riverDock'), pts = river.points;
+    for (let i = 0; i < 40; i++) {
+      const k = rr.int(1, pts.length - 1), t = rr.range(0, 1);
+      const pt = { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * t, z: pts[k - 1].z + (pts[k].z - pts[k - 1].z) * t };
+      const hit = polylineHit(pts, pt.x, pt.z, riverLens);
+      const side = rr.chance(0.5) ? 1 : -1, n = { x: -hit.tz * side, z: hit.tx * side };
+      const off = river.halfWidth + 12, back = { x: hit.px + n.x * off, z: hit.pz + n.z * off };
+      if (Math.abs(back.x) > WORLD_HALF - 140 || Math.abs(back.z) > WORLD_HALF - 140) continue;
+      if (wd(c, back.x, back.z) > 0 || c.pois.some((p) => Math.hypot(p.pos.x - back.x, p.pos.z - back.z) < p.radius + 50)) continue;
+      const level = h0(c, hit.px, hit.pz) + wd(c, hit.px, hit.pz);
+      if (h0(c, back.x, back.z) - level > 4) continue; // sponda troppo alta
+      const poi = addPoi(c, 'lake_dock', back, Math.atan2(-n.x, -n.z));
+      poi.baseHeight = level + 0.55;
+      poi.pier = Math.round(8 + river.halfWidth * 0.65);
       break;
     }
   }
@@ -403,7 +424,7 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
   for (let i = 0; i < land.length; i++)
     for (let j = i + 1; j < land.length; j++) {
       const d = Math.hypot(land[i].pos.x - land[j].pos.x, land[i].pos.z - land[j].pos.z);
-      if (d < 360 && !(model0adj.get(land[i].id) ?? []).includes(land[j].id)) cand.push([land[i], land[j], d]);
+      if (d < 360 * WORLD_K && !(model0adj.get(land[i].id) ?? []).includes(land[j].id)) cand.push([land[i], land[j], d]);
     }
   loopRng.shuffle(cand);
   for (const [a, b] of cand) { if (loops <= 0) break; if (connect(a, b)) loops--; }
@@ -428,8 +449,9 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
   // 9. geografia psicologica e scenografia
   const zr = rng.fork('zones');
   const zones: PsychZone[] = [];
-  for (let gz = -600; gz <= 600; gz += 150)
-    for (let gx = -600; gx <= 600; gx += 150) {
+  const ZE = WORLD_HALF - 100, ZS = Math.round(150 * WORLD_K);
+  for (let gz = -ZE; gz <= ZE; gz += ZS)
+    for (let gx = -ZE; gx <= ZE; gx += ZS) {
       const x = gx + zr.range(-40, 40), z = gz + zr.range(-40, 40);
       if (wd(c, x, z) > 0) { zones.push({ kind: 'water', pos: { x, z }, radius: 60 }); continue; }
       const f = forestField(terrain, x, z);
@@ -442,7 +464,7 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
     if (p.lit) zones.push({ kind: 'lit', pos: p.pos, radius: p.radius + 10 });
     if (p.type === 'clearing') zones.push({ kind: 'clearing', pos: p.pos, radius: p.radius });
     const nearest = Math.min(...c.pois.filter((q) => q !== p).map((q) => Math.hypot(q.pos.x - p.pos.x, q.pos.z - p.pos.z)));
-    if (nearest > 260) zones.push({ kind: 'isolated', pos: p.pos, radius: p.radius + 20 });
+    if (nearest > 260 * WORLD_K) zones.push({ kind: 'isolated', pos: p.pos, radius: p.radius + 20 });
   }
   for (const e of edges) {
     if (e.kind !== 'trail') continue;
@@ -488,12 +510,12 @@ export function validateWorld(spec: WorldSpec, model: WorldModel): Validation {
   const reach = model.reachable(spec.playerSpawn.pos);
   if (model.blockedAt(spec.playerSpawn.pos.x, spec.playerSpawn.pos.z)) errors.push('spawn blocked');
   for (const p of spec.pois) {
-    if (Math.abs(p.pos.x) > 690 || Math.abs(p.pos.z) > 690) errors.push(`poi out ${p.id}`);
+    if (Math.abs(p.pos.x) > WORLD_HALF - 10 || Math.abs(p.pos.z) > WORLD_HALF - 10) errors.push(`poi out ${p.id}`);
     if (!reach.at(p.pos.x, p.pos.z)) errors.push(`poi unreachable ${p.id}`);
     if (p.type !== 'car_park' && model.route(spec.pois[0].id, p.id).length === 0) errors.push(`poi disconnected ${p.id}`);
   }
   for (const o of spec.objects) {
-    if (Math.abs(o.pos.x) > 690 || Math.abs(o.pos.z) > 690) errors.push(`object out ${o.id}`);
+    if (Math.abs(o.pos.x) > WORLD_HALF - 10 || Math.abs(o.pos.z) > WORLD_HALF - 10) errors.push(`object out ${o.id}`);
     else if (!reach.at(o.pos.x, o.pos.z)) errors.push(`object unreachable ${o.id}`);
   }
   for (const b of spec.bridges) {

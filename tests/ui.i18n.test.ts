@@ -106,7 +106,7 @@ describe('t()', () => {
 });
 
 describe('language purity', () => {
-  const pad = (s: string) => ` ${s.toLowerCase().replace(/[.,:;!?·—()'’"]/g, ' ')} `;
+  const pad = (s: string) => ` ${s.replace(/The Dark Seed/g, '').toLowerCase().replace(/[.,:;!?·—()'’"]/g, ' ')} `;
   const EN_ONLY = [' the ', ' and ', ' of ', ' with ', ' you ', ' your ', ' to ', ' is ', ' from ', ' back ', ' then '];
   const IT_ONLY = [' il ', ' lo ', ' la ', ' della ', ' del ', ' che ', ' per ', ' non ', ' una ', ' di ', ' ed ', ' poi ', ' con '];
   it('Italian strings contain no English function words', () => {

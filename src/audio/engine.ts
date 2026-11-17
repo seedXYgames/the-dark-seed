@@ -16,6 +16,7 @@ export interface AudioEngineOptions {
 
 /** Volume di base e distanza di riferimento (m) per ogni suono: più è alta, più lontano si sente. */
 const META: Record<SoundKind, readonly [gain: number, ref: number]> = {
+  mimic_step: [0.3, 2],
   alien_call: [0.7, 20], bigfoot_growl: [0.85, 24], cult_chant: [0.6, 18],
   door_open: [0.5, 3], door_close: [0.6, 4], door_locked: [0.5, 3], door_bang: [0.65, 8], switch: [0.35, 1.5],
   generator_start: [0.4, 6], generator_stop: [0.35, 5], drawer: [0.4, 2], tent_zip: [0.4, 2.5], breaker: [0.6, 3],
@@ -31,6 +32,7 @@ const AMBIENT_META: Record<AmbientRecipeId, readonly [number, number]> = { dropl
 
 const LOOP_META: Record<LoopKind, readonly [gain: number, ref: number]> = {
   mystery_music: [0.35, 1],
+  breath_calm: [0.16, 1], breath_fast: [0.2, 1],
   generator: [0.2, 5], water: [0.32, 5], fire: [0.32, 3], lamp_buzz: [0.1, 1.5], anom_drone: [0.18, 7], engine_idle: [0.16, 5],
 };
 
@@ -80,6 +82,7 @@ export class AudioEngine implements IAudioEngine {
   private wetOffAt = -1;
   private wetSources: OscillatorNode[] = [];
   private muteGain: GainNode | null = null;
+  private voiceBus: GainNode | null = null;
   private graphNodes: AudioNode[] = [];
   private bedGains: Record<BedLayer, GainNode> | null = null;
   private bed: LoopHandle | null = null;
@@ -110,6 +113,12 @@ export class AudioEngine implements IAudioEngine {
     } catch {
       /* il browser può rifiutare senza gesto utente: si riproverà alla prossima chiamata */
     }
+  }
+
+  /** Contesto e nodo d'ingresso per la voce narrante; null prima di resume() o senza Web Audio. */
+  voiceOutput(): { ctx: AudioContext; node: AudioNode } | null {
+    if (this.disposed || !this.ctx || !this.voiceBus) return null;
+    return { ctx: this.ctx, node: this.voiceBus };
   }
 
   suspend(): void {
@@ -158,7 +167,7 @@ export class AudioEngine implements IAudioEngine {
     this.graphNodes = [];
     this.bed = null;
     this.bedGains = null;
-    this.bus = this.dry = this.wet = this.wetIn = this.muteGain = null;
+    this.bus = this.dry = this.wet = this.wetIn = this.muteGain = this.voiceBus = null;
     this.noise = null;
     this.ctx = null;
   }
@@ -332,6 +341,11 @@ export class AudioEngine implements IAudioEngine {
       const pre = keep(c.createGain());
       pre.gain.value = 0.7;
       pre.connect(comp);
+      // voce del narratore: salta la distorsione, passa da compressore, limitatore e muto
+      const voiceBus = keep(c.createGain());
+      voiceBus.gain.value = 0.9;
+      voiceBus.connect(comp);
+      this.voiceBus = voiceBus;
 
       const bus = keep(c.createGain());
       const dry = keep(c.createGain());

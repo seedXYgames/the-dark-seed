@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXTREME_PROBABILITY, SEED_MAX } from '../src/core/contracts';
+import { EXTREME_PROBABILITY, SEED_MAX, WORLD_HALF } from '../src/core/contracts';
 import { Bot } from '../src/game/bot';
 import { GameSession, SIM_DT } from '../src/game/session';
 import { diagnose } from '../src/sim/analysis';
@@ -106,7 +106,7 @@ describe('attori', () => {
 
   it('gli attori restano dentro la mappa e fuori dall\'acqua profonda', () => {
     for (const { s } of shifts) for (const a of s.state.actors) {
-      expect(Math.abs(a.pos.x)).toBeLessThanOrEqual(700); expect(Math.abs(a.pos.z)).toBeLessThanOrEqual(700);
+      expect(Math.abs(a.pos.x)).toBeLessThanOrEqual(WORLD_HALF); expect(Math.abs(a.pos.z)).toBeLessThanOrEqual(WORLD_HALF);
       if (a.kind === 'fauna' && a.state !== 'perch') expect(s.model.waterDepthAt(a.pos.x, a.pos.z)).toBeLessThan(0.6);
     }
   });

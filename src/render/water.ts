@@ -10,7 +10,7 @@ import { lakeRadiusAt, polyLens } from '../world/terrain';
 import type { WorldModel } from '../world/model';
 import { mix, type RGB, type SkyPalette } from './envMath';
 import { set3, u3, u4 } from './sky';
-import { TORCH_PROFILE_GLSL, TORCH_COLOR } from '../core/torch';
+import { TORCH_PROFILE_GLSL, TORCH_COLOR, TORCH_RANGE } from '../core/torch';
 
 Effect.ShadersStore['tdsWaterVertexShader'] = `
 precision highp float;
@@ -52,7 +52,7 @@ void main(void){
   }
   col+=uMoonCol*sp;
   vec3 L=vPos-uTorchPos;float d=length(L);L/=d;
-  float cone=tdsTorchMask(vPos-uTorchPos,uTorchDir)*max(0.0,1.0-d/45.0);
+  float cone=tdsTorchMask(vPos-uTorchPos,uTorchDir)*max(0.0,1.0-d/${TORCH_RANGE * 0.8}.0);
   col+=uP.z*cone*vec3(${TORCH_COLOR.map(c => c.toFixed(3)).join(',')})*(0.035+0.9*pow(max(dot(R,-L),0.0),50.0));
   float fog=uF.x<0.5?1.0-exp(-pow(dist*uF.y,2.0)):clamp((dist-uF.z)/(uF.w-uF.z),0.0,1.0);
   col=mix(col,uFog,fog);

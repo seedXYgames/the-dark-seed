@@ -82,3 +82,43 @@ describe('formatDuration', () => {
     expect(formatDuration(NaN)).toBe('00:00');
   });
 });
+
+import { placeLabels } from '../src/ui/map';
+import { GameSession } from '../src/game/session';
+
+describe('map labels and report markers', () => {
+  const area = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  it('place names never overlap each other on the phone map (60 seeds)', () => {
+    let squeezed = 0, total = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = new GameSession({ seed: seed * 7907, lang: 'it' });
+      const m = s.mapView();
+      const tr = mapTransform(m.size, 600, 600, 18);
+      const items = m.pois.map((p) => ({ text: p.name, ...worldToCanvas(p.pos, tr) }));
+      const boxes = placeLabels(items, [], (t) => t.length * 9.5, 21, 9.4, { w: 600, h: 600 });
+      const ok = boxes.filter((b): b is NonNullable<typeof b> => !!b);
+      total += ok.length;
+      for (let i = 0; i < ok.length; i++) {
+        if (ok[i].squeezed) { squeezed++; continue; }
+        for (let j = i + 1; j < ok.length; j++) if (!ok[j].squeezed) expect(area(ok[i], ok[j]), `seed ${seed * 7907}`).toBe(0);
+      }
+    }
+    expect(squeezed / total).toBeLessThan(0.03);
+  });
+  it('every mission has a numbered marker that turns complete when reported', () => {
+    const s = new GameSession({ seed: 4242, lang: 'it' });
+    const m = s.mapView();
+    expect(m.targets!.length).toBe(s.state.missions.length);
+    expect(m.targets!.map((t) => t.n)).toEqual(s.state.missions.map((_, i) => i + 1));
+    expect(m.targets!.every((t) => t.state === 'pending')).toBe(true);
+    s.state.missions[0].state = 'reported';
+    expect(s.mapView().targets![0].state).toBe('reported');
+  });
+  it('the navigator view follows the player', () => {
+    const tr = mapTransform(300, 200, 200, 0, { x: 120, z: -80 });
+    const c = worldToCanvas({ x: 120, z: -80 }, tr);
+    expect(c.x).toBeCloseTo(100); expect(c.y).toBeCloseTo(100);
+    expect(worldToCanvas({ x: 270, z: -80 }, tr).x).toBeCloseTo(200);
+  });
+});

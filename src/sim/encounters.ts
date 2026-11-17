@@ -1,5 +1,5 @@
 // Incontri fisici del bosco: deterministici, separati dalle anomalie percettive.
-import type { ActorState, Vec2, WorldEvent } from '../core/contracts';
+import { WORLD_HALF, type ActorState, type Vec2, type WorldEvent } from '../core/contracts';
 import { streamFor, type Rng } from '../core/rng';
 import { toLocal, type WorldModel } from '../world/model';
 import type { SimHost } from './host';
@@ -47,7 +47,7 @@ export class Encounters {
       for (let i = 0; i < 50; i++) {
         const a = this.r.range(0, Math.PI * 2), d = poi.radius + this.r.range(35, 75);
         const p = { x: poi.pos.x + Math.sin(a) * d, z: poi.pos.z + Math.cos(a) * d };
-        if (Math.abs(p.x) > 620 || Math.abs(p.z) > 620 || distance(p, h.spec.carSpawn.pos) < 160 || !reachable.at(p.x, p.z)) continue;
+        if (Math.abs(p.x) > WORLD_HALF - 80 || Math.abs(p.z) > WORLD_HALF - 80 || distance(p, h.spec.carSpawn.pos) < 120 || !reachable.at(p.x, p.z)) continue;
         // Un sito asciutto e senza muri, rocce o tronchi per i personaggi e gli oggetti scenici.
         let clear = true;
         for (let x = -7; x <= 7 && clear; x += 3.5) for (let z = -7; z <= 7; z += 3.5) {
