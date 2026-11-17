@@ -21,7 +21,7 @@ const ITEMS = Object.keys({
 } satisfies Record<ItemKind, true>);
 const POIS = Object.keys({
   car_park: true, cabin: true, campsite: true, picnic: true, town: true, gas_station: true, bridge: true,
-  lake_dock: true, lookout: true, utility: true, restroom: true, roadside: true, clearing: true,
+  lake_dock: true, lookout: true, utility: true, restroom: true, roadside: true, clearing: true, sawmill: true, weather_station: true,
 } satisfies Record<PoiType, true>);
 const HINTS = ['move', 'run', 'interact', 'torch', 'phone', 'map', 'photo', 'pause', 'inspect', 'clickToResume'];
 const NOTICES = ['photoSaved', 'photoFull', 'reportSent', 'batteryTaken', 'torchDead', 'shiftNotDone', 'newMessage', 'noVoice'];
@@ -59,7 +59,7 @@ describe('i18n tables', () => {
     expect(ACTIONS.length).toBe(22);
     expect(OBJECTS.length).toBe(26);
     expect(ITEMS.length).toBe(12);
-    expect(POIS.length).toBe(13);
+    expect(POIS.length).toBe(15);
     for (const lang of LANGS) {
       for (const k of required) {
         expect(Object.prototype.hasOwnProperty.call(STRINGS[lang], k), `${lang}:${k}`).toBe(true);

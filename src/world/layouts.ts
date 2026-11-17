@@ -280,8 +280,15 @@ export function layoutPoi(spec: WorldSpec, poi: Poi, rng: Rng, bridge: BridgeSpe
         if (i === churchSlot || (i === barnSlot && barnSlot !== churchSlot)) {
           const church = i === churchSlot;
           const w = church ? rng.range(8, 9.5) : rng.range(9, 11), d = church ? rng.range(13, 16) : rng.range(7, 9);
-          const { b } = building(church ? 'church' : 'barn', lx, sideZ * (12 + d / 2 + rng.range(0, 2)), sideZ > 0 ? Math.PI : 0, w, d, church ? 6.5 : 4.2, false, null);
+          const { b, BW } = building(church ? 'church' : 'barn', lx, sideZ * (12 + d / 2 + rng.range(0, 2)), sideZ > 0 ? Math.PI : 0, w, d, church ? 6.5 : 4.2, false, null);
           b.litWindows = church && rng.chance(0.3);
+          if (church) {
+            // cimitero recintato dietro la chiesa (le lapidi sono disegnate con l'edificio)
+            const hd = d / 2;
+            for (const sx of [-1, 1]) for (const z of [2.5, 5.5, 8.5]) add('fence', 0, 0, { pos: BW(sx * 5.5, -hd - z), rotY: b.rotY + Math.PI / 2 });
+            for (const x of [-4, -1, 2, 4.5]) add('fence', 0, 0, { pos: BW(x, -hd - 10), rotY: b.rotY });
+            if (rng.chance(0.5)) add('lamp', 0, 0, { pos: BW(-1.5, -hd - 4), rotY: b.rotY, yOff: 0.0, state: { on: rng.chance(0.5), type: 'lantern', portable: true } });
+          }
           if (b.litWindows) poi.lit = true;
           k++;
           continue;
@@ -327,6 +334,36 @@ export function layoutPoi(spec: WorldSpec, poi: Poi, rng: Rng, bridge: BridgeSpe
       if (rng.chance(0.62)) add('battery', 0, 0, { pos: BW(-2.2, b.d / 2 + 0.25), y: b.floorY + 0.95, rotY: b.rotY, state: { taken: false } });
       add('panel', 0, 0, { pos: BW(2.4, b.d / 2 + 0.08), rotY: b.rotY, y: b.floorY + 1.3, state: { open: false, breaker: rng.chance(0.25) ? 'tripped' : 'ok' }, links: [cl.id], buildingId: b.id });
       cl.state.breaker = `${poi.id}.panel0`;
+      break;
+    }
+    case 'sawmill': {
+      building('mill', 0, -7, 0, 13, 8, 4.6, false, null);
+      for (const [x, z, r] of [[8.5, -4, 0.2], [9.5, 0, -0.3], [-9, -2, 1.4]] as const) add('woodpile', x, z, { lrot: r });
+      if (rng.chance(0.6)) add('woodpile', -8.5, 2.5, { lrot: 1.6 });
+      const running = rng.chance(0.25);
+      add('generator', -7, -11.8, { lrot: 0.2, state: { running, fuel: rng.range(0.05, 0.6) }, links: [] });
+      if (rng.chance(0.55)) add('vehicle', -4, 7.5, { lrot: Math.PI / 2 + rng.range(-0.3, 0.3), state: vehicleState(rng) });
+      add('trace', 2, 5, { state: { type: 'tire', age: rng.range(0, 1) } });
+      add('sign', 6, 8, { lrot: Math.PI, state: { textIt: poi.name.it, textEn: poi.name.en, tilt: rng.chance(0.4) ? 0.35 : 0, board: true } });
+      battery(8.2, -2.2, 0.3, { yOff: 0.05 });
+      if (rng.chance(0.55)) add('item', 9, -2, { yOff: 0.02, rotY: rng.range(0, 6.28), item: genericItem(rng), state: { taken: false } });
+      if (rng.chance(0.4)) add('chair', 4, -1.5, { lrot: rng.range(0, 6.28) });
+      lampPost(0.7, 3, 3.5);
+      break;
+    }
+    case 'weather_station': {
+      building('mast', 0, -2, 0, 0.8, 0.8, 9, false, null);
+      for (const x of [-1.5, 1.5]) add('fence', x, -5, { lrot: 0 });
+      add('fence', -1.5, 1, { lrot: 0 });
+      for (const sx of [-3, 3]) for (const z of [-3.5, -0.5]) add('fence', sx, z, { lrot: Math.PI / 2 });
+      const lp = add('lamp_post', -4.5, 2, { state: { on: rng.chance(0.75) } });
+      if (lp.state.on) poi.lit = true;
+      add('panel', 0, -1.52, { lrot: 0, yOff: 1.3, state: { open: false, breaker: rng.chance(0.3) ? 'tripped' : 'ok' }, links: [lp.id] });
+      lp.state.breaker = `${poi.id}.panel0`;
+      add('logbox', 4.5, 2.5, { state: { signed: false, entries: rng.int(3, 40) } });
+      sign(-5, 3.5, 'trail', { it: poi.name.it, en: poi.name.en });
+      battery(1.5, -2.6, 0.3, { yOff: 0.05 });
+      if (rng.chance(0.4)) add('trace', rng.range(-6, 6), rng.range(2, 6), { state: { type: rng.pick(['boot', 'tracks_deer']), age: rng.range(0, 1) } });
       break;
     }
     case 'bridge': {

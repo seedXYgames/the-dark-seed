@@ -555,6 +555,14 @@ export const RECIPES: Record<SoundKind, Recipe> = {
     tn(c, out, t + 0.09, { type: 'sawtooth', f: 190 * p.pitch, f2: 230 * p.pitch, dur: 0.09, peak: 0.05, attack: 0.01 });
     return 0.2;
   },
+  radio(c, out, t, p) {
+    // radio di servizio: scatto del tasto, soffio filtrato e coda di squelch
+    clickAt(c, out, t, p, 1600, 0.5, 220);
+    nz(c, out, t + 0.01, p, { dur: 0.32, peak: 0.22, attack: 0.01, type: 'bandpass', f: 1900 });
+    tn(c, out, t + 0.02, { type: 'square', f: 1450 * p.pitch, dur: 0.05, peak: 0.04, attack: 0.003 });
+    nz(c, out, t + 0.34, p, { dur: 0.12, peak: 0.12, attack: 0.004, type: 'highpass', f: 2600 });
+    return 0.5;
+  },
   sms(c, out, t, p) {
     const notes: [number, number][] = [[0, 880], [0.13, 1318.5]];
     for (const [at, f] of notes) {

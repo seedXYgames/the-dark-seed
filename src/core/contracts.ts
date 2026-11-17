@@ -28,7 +28,7 @@ export interface Vec2 { x: number; z: number }
 
 export type PoiType =
   | 'car_park' | 'cabin' | 'campsite' | 'picnic' | 'town' | 'gas_station' | 'bridge'
-  | 'lake_dock' | 'lookout' | 'utility' | 'restroom' | 'roadside' | 'clearing';
+  | 'lake_dock' | 'lookout' | 'utility' | 'restroom' | 'roadside' | 'clearing' | 'sawmill' | 'weather_station';
 
 export interface Poi {
   id: string;
@@ -74,7 +74,7 @@ export interface TerrainSpec {
   forestBias: number; // densità media del bosco
 }
 
-export type BuildingKind = 'cabin' | 'house' | 'kiosk' | 'shed' | 'restroom' | 'tower' | 'canopy' | 'church' | 'barn';
+export type BuildingKind = 'cabin' | 'house' | 'kiosk' | 'shed' | 'restroom' | 'tower' | 'canopy' | 'church' | 'barn' | 'mill' | 'mast';
 export interface BuildingSpec {
   id: string;
   poiId: string;
@@ -346,6 +346,8 @@ export interface Photo {
   poiId?: string;
   /** Soggetti effettivamente presenti nel fotogramma catturato. */
   subjects: string[];
+  /** Archetipi inquadrati (osservatore, creature, siti): per gli obiettivi. */
+  archetypes?: string[];
 }
 
 export interface Report {
@@ -366,6 +368,17 @@ export interface TorchState {
   flicker: number; // 0..1 intensità corrente del tremolio
 }
 
+/** Fiato, freddo e batteria del telefono dell'agente. */
+export interface BodyState {
+  stamina: number; // 0..1 fiato per la corsa
+  exhausted: boolean; // senza fiato: niente corsa finché non si riprende
+  warmth: number; // 0..1 (1 = caldo)
+  phone: number; // 0..1 batteria del telefono
+  breathless: number;
+  coldest: number;
+  phoneDied: boolean;
+}
+
 export type Personality = 'reserved' | 'pragmatic' | 'ironic' | 'skeptical' | 'nervous';
 
 export interface ExtremePlan {
@@ -383,6 +396,7 @@ export interface SessionState {
   tick: number;
   player: { pos: Vec2; y: number; yaw: number; pitch: number; running: boolean; indoors: boolean };
   torch: TorchState;
+  body: BodyState;
   missions: Mission[];
   observations: Observation[];
   photos: Photo[];

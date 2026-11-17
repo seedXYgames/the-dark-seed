@@ -65,7 +65,7 @@ export type SoundKind =
   | 'frog' | 'splash' | 'vehicle_pass' | 'vehicle_start' | 'car_door' | 'typing' | 'paper' | 'camera' | 'sms'
   | 'battery' | 'click' | 'steps_far' | 'voice_far' | 'knock' | 'hum_anom' | 'whisper_anom' | 'tone_anom'
   | 'thunder' | 'branch_fall' | 'fire_douse' | 'ui' | 'torch_click' | 'rustle' | 'chair_scrape' | 'report_sent' | 'screech' | 'nightbird'
-  | 'alien_call' | 'bigfoot_growl' | 'cult_chant' | 'mimic_step';
+  | 'alien_call' | 'bigfoot_growl' | 'cult_chant' | 'mimic_step' | 'radio';
 
 export type LoopKind = 'generator' | 'water' | 'fire' | 'lamp_buzz' | 'anom_drone' | 'engine_idle' | 'mystery_music' | 'breath_calm' | 'breath_fast';
 export interface MysteryMood {
@@ -184,6 +184,8 @@ export interface PhoneView {
   signal: number; // 0..4
   torchCharge: number; // 0..1
   torchSpares: number;
+  /** Batteria del telefono 0..1. */
+  phoneBattery?: number;
   messages: PhoneMessage[];
   missions: MissionView[];
   photos: Photo[];
@@ -205,6 +207,10 @@ export interface SummaryView {
   chronicle?: { time: string; place: string; text: string; seen: boolean; rare: boolean }[];
   /** Lo stesso registro in testo semplice, per lo scaricamento. */
   chronicleText?: string;
+  /** Obiettivi sbloccati per la prima volta in questo turno (id). */
+  achievements?: string[];
+  /** La storia del bosco: cosa si è capito dei misteri, in base agli indizi trovati. */
+  story?: { title: string; text: string; found: number; total: number }[];
 }
 
 export interface UiCallbacks {
@@ -229,7 +235,7 @@ export interface UiCallbacks {
   onUiSound(kind: 'ui' | 'typing' | 'paper'): void;
 }
 
-export type ScreenId = 'loading' | 'menu' | 'settings' | 'intro' | 'game' | 'pause' | 'summary';
+export type ScreenId = 'loading' | 'menu' | 'settings' | 'intro' | 'game' | 'pause' | 'summary' | 'achievements';
 export type PhoneTab = 'messages' | 'tasks' | 'camera' | 'gallery' | 'map';
 
 export interface IUi {

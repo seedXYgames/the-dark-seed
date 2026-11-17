@@ -142,6 +142,7 @@ function poiGlyph(ctx: CanvasRenderingContext2D, type: string, x: number, y: num
     case 'gas_station':
     case 'restroom':
     case 'utility':
+    case 'sawmill':
       ctx.rect(x - u * 0.8, y - u * 0.3, u * 1.6, u * 1.1);
       ctx.moveTo(x - u * 1.05, y - u * 0.3);
       ctx.lineTo(x, y - u * 1.15);
@@ -157,6 +158,7 @@ function poiGlyph(ctx: CanvasRenderingContext2D, type: string, x: number, y: num
       ctx.stroke();
       break;
     case 'lookout':
+    case 'weather_station':
       ctx.arc(x, y, u * 0.9, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();

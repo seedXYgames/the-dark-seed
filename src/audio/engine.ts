@@ -16,7 +16,7 @@ export interface AudioEngineOptions {
 
 /** Volume di base e distanza di riferimento (m) per ogni suono: più è alta, più lontano si sente. */
 const META: Record<SoundKind, readonly [gain: number, ref: number]> = {
-  mimic_step: [0.3, 2],
+  mimic_step: [0.3, 2], radio: [0.45, 1],
   alien_call: [0.7, 20], bigfoot_growl: [0.85, 24], cult_chant: [0.6, 18],
   door_open: [0.5, 3], door_close: [0.6, 4], door_locked: [0.5, 3], door_bang: [0.65, 8], switch: [0.35, 1.5],
   generator_start: [0.4, 6], generator_stop: [0.35, 5], drawer: [0.4, 2], tent_zip: [0.4, 2.5], breaker: [0.6, 3],

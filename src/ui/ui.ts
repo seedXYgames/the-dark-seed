@@ -19,7 +19,7 @@ const SUBTITLE_MS = 7000;
 const HINTS_MS = 12000;
 const TORCH_SHOW_MS = 3500;
 
-const SCREEN_IDS: readonly ScreenId[] = ['loading', 'menu', 'settings', 'intro', 'game', 'pause', 'summary'];
+const SCREEN_IDS: readonly ScreenId[] = ['loading', 'menu', 'settings', 'intro', 'game', 'pause', 'summary', 'achievements'];
 
 export class Ui implements IUi {
   private settings: Settings;
@@ -41,6 +41,11 @@ export class Ui implements IUi {
   private readonly torchEl: HTMLElement;
   private readonly torchFill: HTMLElement;
   private readonly torchSpares: HTMLElement;
+  private readonly staminaEl: HTMLElement;
+  private readonly staminaFill: HTMLElement;
+  private readonly frostEl: HTMLElement;
+  private readonly radioEl: HTMLElement;
+  private bodySig = '';
   private readonly unreadEl: HTMLElement;
   private readonly unreadCount: HTMLElement;
   private readonly inspectEl: HTMLElement;
@@ -146,7 +151,13 @@ export class Ui implements IUi {
     navScreen.append(navBar, this.navCanvas);
     this.navEl.appendChild(navScreen);
 
-    this.hud.append(dot, this.promptEl, bottom, this.noticesEl, this.hintsEl, corner, this.navEl);
+    this.staminaEl = el('div', 'tds-stamina');
+    this.staminaFill = el('i');
+    this.staminaEl.appendChild(this.staminaFill);
+    this.frostEl = el('div', 'tds-frost');
+    this.radioEl = el('div', 'tds-radio');
+    this.radioEl.hidden = true;
+    this.hud.append(this.frostEl, dot, this.promptEl, bottom, this.noticesEl, this.hintsEl, corner, this.navEl, this.staminaEl, this.radioEl);
 
     // ---- telefono e schermate
     this.phone = new Phone(callbacks, () => this.settings.lang, () => this.userClosePhone());
@@ -347,6 +358,20 @@ export class Ui implements IUi {
     this.torchTimer = window.setTimeout(() => this.torchEl.classList.remove('is-visible'), TORCH_SHOW_MS);
   }
 
+  /** Fiato (barra sottile in basso), freddo (brina ai bordi) e chiamata radio in attesa. */
+  setBody(stamina: number, exhausted: boolean, warmth: number, radioPending: boolean): void {
+    const st = Math.min(1, Math.max(0, stamina)), cold = Math.min(1, Math.max(0, (0.45 - warmth) / 0.4));
+    const sig = `${Math.round(st * 50)}|${exhausted ? 1 : 0}|${Math.round(cold * 20)}|${radioPending ? 1 : 0}|${this.settings.lang}`;
+    if (sig === this.bodySig) return;
+    this.bodySig = sig;
+    this.staminaFill.style.transform = `scaleX(${st})`;
+    this.staminaEl.classList.toggle('is-visible', st < 0.97);
+    this.staminaEl.classList.toggle('is-out', exhausted);
+    this.frostEl.style.opacity = String(cold);
+    this.radioEl.hidden = !radioPending;
+    if (radioPending) this.radioEl.textContent = t(this.settings.lang, 'hud.radio');
+  }
+
   setPauseInfo(seed: number): void {
     this.screens.setPauseInfo(seed);
   }
@@ -493,7 +518,7 @@ export class Ui implements IUi {
       if (this.screens.navigate(key === 'ArrowDown' ? 1 : -1)) ev.preventDefault();
       return;
     }
-    if ((this.screen === 'settings' || this.screen === 'intro') && key === 'Escape') {
+    if ((this.screen === 'settings' || this.screen === 'intro' || this.screen === 'achievements') && key === 'Escape') {
       ev.preventDefault();
       ev.stopImmediatePropagation();
       this.show('menu');

@@ -1,6 +1,7 @@
 // Schermate a tutto schermo (caricamento, menu, impostazioni, introduzione, pausa, riepilogo)
 // e piccoli strumenti DOM condivisi dall'interfaccia. Nessun accesso al DOM a livello di modulo.
 import type { ScreenId, SummaryView, UiCallbacks } from '../core/api';
+import { ACHIEVEMENTS, favouriteSeed, loadProgress, saveProgress } from '../game/achievements';
 import type { GraphicsSettings, Lang, Settings } from '../core/contracts';
 import { parseSeed, randomSeed, seedFromUrl } from '../core/seed';
 import { GAME_TITLE, t } from '../i18n/strings';
@@ -219,6 +220,7 @@ export class Screens {
       intro: this.buildIntro(),
       pause: this.buildPause(),
       summary: this.buildSummary(),
+      achievements: this.buildAchievements(),
     };
     for (const p of Object.values(this.panels)) {
       p.hidden = true;
@@ -244,6 +246,7 @@ export class Screens {
     this.el.dataset.screen = screen;
     if (next === 'pause') this.setConfirm(false);
     if (next === 'intro') this.validateSeed();
+    if (next === 'achievements') this.renderAchievements();
     if (next) {
       const target = this.panels[next].querySelector<HTMLElement>('[data-autofocus]');
       if (target) target.focus({ preventScroll: true });
@@ -336,6 +339,10 @@ export class Screens {
     start.dataset.nav = '';
     start.dataset.autofocus = '';
     start.addEventListener('click', () => this.host.go('intro'));
+    const goals = i18n(el('button', 'tds-menu-item'), 'menu.achievements');
+    goals.type = 'button';
+    goals.dataset.nav = '';
+    goals.addEventListener('click', () => this.host.go('achievements'));
     const settings = i18n(el('button', 'tds-menu-item'), 'menu.settings');
     settings.type = 'button';
     settings.dataset.nav = '';
@@ -343,7 +350,7 @@ export class Screens {
     const exit = i18n(el('button', 'tds-menu-item'), 'menu.exit');
     exit.type = 'button';
     exit.dataset.nav = '';
-    nav.append(start, settings, exit);
+    nav.append(start, goals, settings, exit);
     inner.append(title, nav);
     // un browser chiude solo le schede aperte da uno script: altrimenti resta uno schermo nero di congedo
     const bye = el('div', 'tds-exit');
@@ -552,7 +559,7 @@ export class Screens {
     const controls = el('div', 'tds-controls');
     controls.appendChild(i18n(el('h3', 'tds-h3'), 'pause.controls'));
     const list = el('ul', 'tds-controls-list');
-    for (const k of ['hint.move', 'hint.run', 'hint.interact', 'hint.zoom', 'hint.torch', 'hint.phone', 'hint.map', 'hint.photo', 'hint.pause']) {
+    for (const k of ['hint.move', 'hint.run', 'hint.interact', 'hint.zoom', 'hint.torch', 'hint.phone', 'hint.map', 'hint.photo', 'hint.radio', 'hint.pause']) {
       list.appendChild(i18n(el('li'), k));
     }
     controls.appendChild(list);
@@ -591,6 +598,105 @@ export class Screens {
     if (this.active !== 'pause') return;
     const target = (open ? this.pauseConfirm : this.pauseMain).querySelector<HTMLElement>('button');
     if (target) target.focus({ preventScroll: true });
+  }
+
+  // ------------------------------------------------------------ obiettivi
+
+  private achBody!: HTMLElement;
+
+  private buildAchievements(): HTMLElement {
+    const p = el('section', 'tds-screen tds-achievements');
+    const panel = el('div', 'tds-panel tds-profile');
+    panel.appendChild(i18n(el('h2', 'tds-h2'), 'profile.title'));
+    this.achBody = el('div', 'tds-ach-body');
+    const back = i18n(el('button', 'tds-btn tds-btn-quiet tds-profile-back'), 'settings.back');
+    back.type = 'button';
+    back.dataset.nav = '';
+    back.dataset.autofocus = '';
+    back.addEventListener('click', () => this.host.go('menu'));
+    panel.append(this.achBody, back);
+    p.appendChild(panel);
+    return p;
+  }
+
+  private renderAchievements(): void {
+    const lang = this.host.lang();
+    const prog = loadProgress();
+    const body = this.achBody;
+    body.textContent = '';
+    const got = ACHIEVEMENTS.filter((a) => prog.unlocked[a.id]).length;
+
+    // nome del giocatore (salvato nel browser)
+    const nameRow = el('div', 'tds-profile-name');
+    const nameId = this.uid('profile-name');
+    const nameLabel = el('label', 'tds-profile-label', t(lang, 'profile.name'));
+    nameLabel.htmlFor = nameId;
+    const name = el('input', 'tds-profile-input');
+    name.id = nameId; name.type = 'text'; name.maxLength = 24; name.autocomplete = 'off'; name.spellcheck = false;
+    name.placeholder = t(lang, 'profile.namePlaceholder');
+    name.value = prog.name;
+    name.dataset.nav = '';
+    const saveName = () => { const p2 = loadProgress(); p2.name = name.value.trim().slice(0, 24); saveProgress(p2); };
+    name.addEventListener('change', saveName);
+    name.addEventListener('blur', saveName);
+    name.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') name.blur(); });
+    nameRow.append(nameLabel, name);
+    body.appendChild(nameRow);
+
+    // statistiche
+    const tt = prog.totals;
+    const hours = Math.floor(tt.seconds / 3600), mins = Math.round((tt.seconds % 3600) / 60);
+    const fav = favouriteSeed(prog);
+    const stats: [string, string][] = [
+      ['profile.stat.achievements', `${got} / ${ACHIEVEMENTS.length}`],
+      ['profile.stat.shifts', String(prog.shifts)],
+      ['profile.stat.completed', String(prog.completed)],
+      ['profile.stat.seeds', String(prog.seeds.length)],
+      ['profile.stat.time', hours ? `${hours} h ${mins} min` : `${mins} min`],
+      ['profile.stat.longest', formatDuration(tt.longest)],
+      ['profile.stat.distance', `${(tt.meters / 1000).toFixed(1)} km`],
+      ['profile.stat.reports', String(tt.reports)],
+      ['profile.stat.photos', String(tt.photos)],
+      ['profile.stat.clues', String(tt.clues)],
+      ['profile.stat.radio', String(tt.radio)],
+      ['profile.stat.deaths', String(tt.deaths)],
+    ];
+    const grid = el('dl', 'tds-profile-stats');
+    for (const [k, v] of stats) { const d = el('div', 'tds-profile-stat'); d.append(el('dd', undefined, v), el('dt', undefined, t(lang, k))); grid.appendChild(d); }
+    body.appendChild(grid);
+    const bar = el('div', 'tds-profile-bar');
+    const fill = el('i');
+    fill.style.width = `${Math.round((got / ACHIEVEMENTS.length) * 100)}%`;
+    bar.appendChild(fill);
+    body.appendChild(bar);
+
+    // seed recenti: un clic li gioca di nuovo
+    if (prog.recent.length) {
+      body.appendChild(el('h3', 'tds-h3', t(lang, 'profile.recent')));
+      const chips = el('div', 'tds-profile-seeds');
+      for (const sd of prog.recent) {
+        const b = el('button', `tds-seed-chip${sd === fav ? ' is-fav' : ''}`, String(sd));
+        b.type = 'button'; b.dataset.nav = '';
+        b.title = t(lang, 'profile.playSeed', { seed: sd, n: prog.seedPlays[String(sd)] ?? 1 });
+        b.addEventListener('click', () => this.host.callbacks.onStartGame(sd));
+        chips.appendChild(b);
+      }
+      body.appendChild(chips);
+    }
+
+    // obiettivi: prima quelli sbloccati
+    body.appendChild(el('h3', 'tds-h3', t(lang, 'profile.achievements', { n: got, total: ACHIEVEMENTS.length })));
+    const list = el('ul', 'tds-ach-list tds-ach-grid');
+    const sorted = [...ACHIEVEMENTS].sort((a, b) => Number(!!prog.unlocked[b.id]) - Number(!!prog.unlocked[a.id]));
+    for (const a of sorted) {
+      const u = prog.unlocked[a.id];
+      const li = el('li', `tds-ach${u ? ' is-unlocked' : ''}`);
+      const hidden = !u && a.secret;
+      li.append(el('span', 'tds-ach-name', hidden ? '???' : a.name[lang]), el('span', 'tds-ach-desc', hidden ? t(lang, 'achievements.secret') : a.desc[lang]));
+      if (u) li.appendChild(el('span', 'tds-ach-seed', t(lang, 'achievements.seed', { seed: u.seed })));
+      list.appendChild(li);
+    }
+    body.appendChild(list);
   }
 
   // ------------------------------------------------------------ riepilogo
@@ -654,6 +760,28 @@ export class Screens {
     if (view.shareUrl) {
       body.appendChild(i18n(el('p', 'tds-summary-sub'), 'summary.shareLink'));
       body.appendChild(copyRow(view.shareUrl, 'summary.copyLink', 'summary.shareLink', true));
+    }
+
+    if (view.achievements && view.achievements.length) {
+      body.appendChild(i18n(el('h3', 'tds-h3'), 'summary.achievements'));
+      const list = el('ul', 'tds-ach-list is-new');
+      for (const id of view.achievements) {
+        const a = ACHIEVEMENTS.find((x) => x.id === id);
+        if (!a) continue;
+        const li = el('li', 'tds-ach is-unlocked');
+        li.append(el('span', 'tds-ach-name', a.name[lang]), el('span', 'tds-ach-desc', a.desc[lang]));
+        list.appendChild(li);
+      }
+      body.appendChild(list);
+    }
+    if (view.story && view.story.length) {
+      body.appendChild(i18n(el('h3', 'tds-h3'), 'summary.story'));
+      for (const st of view.story) {
+        const d = el('div', 'tds-story');
+        d.append(el('h4', 'tds-story-title', st.title), el('p', 'tds-story-text', st.text),
+          el('p', 'tds-muted tds-story-count', t(lang, 'summary.storyClues', { n: st.found, total: st.total })));
+        body.appendChild(d);
+      }
     }
 
     body.appendChild(i18n(el('h3', 'tds-h3'), 'summary.reports'));

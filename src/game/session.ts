@@ -21,6 +21,11 @@ import { MISSION_TYPES, generateMissions, missionSatisfiedBy } from '../sim/miss
 import { isLampLit, isObjectAvailable } from '../sim/objects';
 import type { WorldModel } from '../world/model';
 import { generateWorld } from '../world/worldgen';
+import { WORLD_HALF } from '../core/contracts';
+import { Body, newBody, type PhoneUse } from './body';
+import { DispatchRadio, type RadioLine, type RadioWorld } from './radio';
+import type { ShiftRecord } from './achievements';
+import { storyOf } from './story';
 
 export const SIM_DT = 0.1;
 export const MAX_PHOTOS = 12;
@@ -90,6 +95,12 @@ export class GameSession implements SimHost {
   private cachedWeather: WeatherState;
   private cachedSky: SkyState;
   private lastBoundaryNote = -100;
+  readonly body: Body;
+  readonly radio: DispatchRadio;
+  private phoneUse: PhoneUse = 'off';
+  private stats = { torchOn: 0, run: 0, walk: 0, batteries: 0, church: false, pier: false };
+  private housesEntered = new Set<string>();
+  private photoArchetypes: string[] = [];
 
   constructor(opts: { seed: number; lang: Lang; simFactory?: SimFactory; postProcess?: (spec: WorldSpec) => void }) {
     const { spec, model } = generateWorld(opts.seed, opts.postProcess);
@@ -105,6 +116,7 @@ export class GameSession implements SimHost {
       seed: opts.seed, generatorVersion: GENERATOR_VERSION, lang: opts.lang, time: 0, tick: 0,
       player: { pos: { ...spec.playerSpawn.pos }, y: model.groundAt(spec.playerSpawn.pos.x, spec.playerSpawn.pos.z), yaw: spec.playerSpawn.yaw + Math.PI, pitch: 0, running: false, indoors: false },
       torch: { on: false, charge: tr.range(0.22, 1), spares: 0, fault: 0, flicker: 0 },
+      body: newBody(streamFor(opts.seed, 'encounters').fork('phone').range(0.5, 0.95)),
       missions, observations: [], photos: [], messages: [], reports: [], objects, objectPos: {}, dynamicObjects: [], actors: [], log: [],
       mysteries: spec.mysteries.map((m) => ({ ...m, clues: m.clues.map((c) => ({ ...c })), timeline: m.timeline.map((t) => ({ ...t })), discovered: [] })),
       personality: pickPersonality(opts.seed), extreme: { predisposed, done: false }, ended: false, abandoned: false,
@@ -117,6 +129,8 @@ export class GameSession implements SimHost {
       poiBearing: (id) => { const p = model.poi(id); return p ? { dir: bearing(car, p.pos), dist: Math.round(Math.hypot(p.pos.x - car.x, p.pos.z - car.z) / 10) * 10 } : { dir: 'n', dist: 0 }; },
     };
     this.composer = new NarrativeComposer(ctx);
+    this.body = new Body(this.state.body);
+    this.radio = new DispatchRadio(opts.seed);
     this.refreshMissionTexts();
     this.cachedWeather = weatherAt(spec.weather, 0);
     this.cachedSky = skyAt(spec.sky, this.cachedWeather, 0);
@@ -323,16 +337,18 @@ export class GameSession implements SimHost {
       if (mag > 0.01) {
         const f = input.forward / Math.max(1, mag), s = input.strafe / Math.max(1, mag);
         const dirX = Math.sin(p.yaw) * f + Math.cos(p.yaw) * s, dirZ = Math.cos(p.yaw) * f - Math.sin(p.yaw) * s;
-        let speed = input.run ? RUN_SPEED : WALK_SPEED;
+        const run = input.run && this.body.canRun();
+        let speed = (run ? RUN_SPEED : WALK_SPEED) * this.body.speedFactor();
         const ahead = this.model.groundAt(p.pos.x + dirX * 1.2, p.pos.z + dirZ * 1.2) - p.y;
         if (ahead > 0.45) speed *= clamp(1.35 - ahead, 0.35, 1); // salita ripida: più lenti, mai bloccati
         if (this.model.waterDepthAt(p.pos.x, p.pos.z) > 0.1 && !this.model.platformAt(p.pos.x, p.pos.z)) speed *= 0.6;
         const before = p.pos;
         p.pos = this.model.move(p.pos, dirX * speed * dt, dirZ * speed * dt, (id) => { const s2 = st.objects[id]?.state; return s2 === 'open' || s2 === 'ajar'; });
         const moved = Math.hypot(p.pos.x - before.x, p.pos.z - before.z);
-        p.running = input.run && moved > 0.01;
+        p.running = run && moved > 0.01;
+        if (p.running) this.stats.run += moved; else this.stats.walk += moved;
         this.stepDist += moved;
-        const stride = input.run ? 1.9 : 1.35;
+        const stride = run ? 1.9 : 1.35;
         if (this.stepDist > stride) {
           this.stepDist = 0;
           let surface = this.model.surfaceAt(p.pos.x, p.pos.z);
@@ -340,10 +356,10 @@ export class GameSession implements SimHost {
             if (this.cachedWeather.snowCover > 0.45) surface = 'snow';
             else if (this.cachedWeather.wetness > 0.6 || this.model.waterDepthAt(p.pos.x, p.pos.z) > 0.05) surface = 'wet';
           }
-          this.out.footsteps.push({ surface, running: input.run });
+          this.out.footsteps.push({ surface, running: run });
         }
-        this.noise = Math.min(1, this.noise + moved * (input.run ? 0.09 : 0.012));
-        if (moved < speed * dt * 0.2 && (Math.abs(p.pos.x) > 692 || Math.abs(p.pos.z) > 692) && st.time - this.lastBoundaryNote > 30) {
+        this.noise = Math.min(1, this.noise + moved * (run ? 0.09 : 0.012));
+        if (moved < speed * dt * 0.2 && (Math.abs(p.pos.x) > WORLD_HALF - 8 || Math.abs(p.pos.z) > WORLD_HALF - 8) && st.time - this.lastBoundaryNote > 30) {
           this.lastBoundaryNote = st.time;
           this.out.notices.push({ key: 'notice.boundary' });
         }
@@ -353,6 +369,7 @@ export class GameSession implements SimHost {
     const ground = this.model.groundAt(p.pos.x, p.pos.z);
     if (p.y > ground + 0.02) { this.yVel -= 18 * dt; p.y = Math.max(ground, p.y + this.yVel * dt); } else { p.y += (ground - p.y) * Math.min(1, dt * 14); this.yVel = 0; }
     p.indoors = this.model.indoorsAt(p.pos.x, p.pos.z);
+    this.trackPlaces();
     this.noise = Math.max(0, this.noise - dt * 0.12);
 
     this.acc += dt;
@@ -375,9 +392,97 @@ export class GameSession implements SimHost {
       if (due.length) { this.scheduled = this.scheduled.filter((s) => s.t > st.time); for (const d of due) d.run(); }
     }
     this.updateTorch();
+    this.updateBody();
     this.sim.step(SIM_DT);
     if (st.tick % 5 === 0) this.perceive();
-    if (st.tick % 10 === 0) this.checkArrival();
+    if (st.tick % 10 === 0) { this.checkArrival(); this.checkClues(); }
+  }
+
+  /** Per la fotocamera e lo schermo: il telefono si scarica di più quando è in uso. */
+  setPhoneUse(use: PhoneUse): void { this.phoneUse = use; }
+
+  private trackPlaces() {
+    const p = this.state.player.pos, pl = this.model.platformAt(p.x, p.z);
+    if (pl?.kind === 'floor') {
+      const b = this.model.buildingById.get(pl.id);
+      if (b?.kind === 'house' && !this.housesEntered.has(b.id)) {
+        this.housesEntered.add(b.id);
+        this.emit({ type: 'house_entered', pos: p, origin: 'player', radius: 0, props: { building: b.id } });
+      }
+    }
+    if (pl?.kind === 'pier' && !this.stats.pier && Math.hypot(p.x - pl.cx, p.z - pl.cz) > pl.hz - 2.5) {
+      // in fondo al molo, dalla parte dell'acqua
+      const fx = pl.cx + Math.sin(pl.rot) * pl.hz, fz = pl.cz + Math.cos(pl.rot) * pl.hz;
+      if (Math.hypot(p.x - fx, p.z - fz) < 3) this.stats.pier = true;
+    }
+    if (!this.stats.church && this.state.tick % 10 === 0) {
+      for (const b of this.spec.buildings) if (b.kind === 'church' && Math.hypot(b.pos.x - p.x, b.pos.z - p.z) < b.d / 2 + 8) this.stats.church = true;
+    }
+  }
+
+  private updateBody() {
+    const st = this.state, p = st.player;
+    if (st.torch.on && st.torch.charge > 0) this.stats.torchOn += SIM_DT;
+    const car = this.spec.objects.find((o) => o.kind === 'police_car');
+    const carPos = car ? this.pose(car.id) ?? car.pos : null;
+    const nearCar = !!carPos && Math.hypot(carPos.x - p.pos.x, carPos.z - p.pos.z) < 6;
+    let nearFire = false;
+    if (st.tick % 5 === 0 || this.fireCache === undefined) {
+      this.fireCache = this.spec.objects.some((o) => o.kind === 'campfire' && st.objects[o.id]?.state === 'burning' && Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z) < 5);
+    }
+    nearFire = this.fireCache;
+    const moving = Math.hypot(p.pos.x - this.lastBodyPos.x, p.pos.z - this.lastBodyPos.z) > SIM_DT * 0.5;
+    this.lastBodyPos = { x: p.pos.x, z: p.pos.z };
+    const notes = this.body.step(SIM_DT, { running: p.running, moving, indoors: p.indoors, nearCar, nearFire, weather: this.cachedWeather, phoneUse: this.phoneUse });
+    for (const n of notes) this.out.notices.push({ key: `notice.body.${n}` });
+    if (notes.includes('phoneDead')) this.emit({ type: 'phone_died', pos: p.pos, origin: 'player', radius: 0 });
+    // radio di servizio
+    const lines = this.radio.step(this.radioWorld(), st.ended || !!st.death || this.sim.extremeState().active);
+    this.playRadio(lines);
+  }
+  private fireCache: boolean | undefined;
+  private cluesSeen = 0;
+  private checkClues() {
+    const ms = this.state.mysteries;
+    const n = ms.reduce((k, m) => k + m.discovered.length, 0);
+    if (n <= this.cluesSeen) return;
+    this.cluesSeen = n;
+    this.out.notices.push({ key: 'notice.clue', params: { n, total: ms.reduce((k, m) => k + m.clues.length, 0) } });
+  }
+  private lastBodyPos: Vec2 = { x: 0, z: 0 };
+
+  private radioWorld(): RadioWorld {
+    const st = this.state;
+    return {
+      time: st.time, lang: st.lang, officer: this.spec.officer,
+      tipPoi: () => {
+        const ids = [...new Set(st.mysteries.flatMap((m) => m.clues.map((c) => c.poiId)))].filter((id) => !this.visited.has(id));
+        const id = ids[0] ?? st.missions.find((m) => m.state === 'pending')?.poiId;
+        const poi = id ? this.model.poi(id) : undefined;
+        return poi ? { id: poi.id, name: poi.name } : null;
+      },
+      badWeather: () => this.cachedWeather.precip > 0.35 || this.cachedWeather.temperature < 0,
+      uneasy: () => st.actors.some((a) => a.present && (a.archetype === 'watcher' || a.kind === 'anomaly' || a.kind === 'encounter')),
+    };
+  }
+
+  private playRadio(lines: RadioLine[]) {
+    const st = this.state;
+    for (const l of lines) {
+      if (l.sound) this.out.sounds.push({ kind: 'radio' });
+      if (l.text) this.out.lines.push({ text: l.text, speaker: l.speaker, tts: true });
+      if (l.event === 'radio_call') this.out.notices.push({ key: 'notice.radioCall' });
+      if (l.event) this.emit({ type: l.event, pos: st.player.pos, origin: l.event === 'radio_wrong' ? 'anomaly' : 'player', radius: 0, tags: l.event === 'radio_wrong' ? ['unidentified', 'radio'] : ['radio'] });
+    }
+  }
+
+  /** Il giocatore risponde alla radio (tasto R). */
+  answerRadio(): boolean {
+    if (!this.radio.pending()) return false;
+    const c = this.radio.current;
+    const poi = c?.poiId ? this.model.poi(c.poiId)?.name[this.state.lang] : undefined;
+    this.playRadio(this.radio.answer(this.radioWorld(), poi));
+    return true;
   }
 
   private updateTorch() {
@@ -587,7 +692,7 @@ export class GameSession implements SimHost {
         this.sim.onPlayerEvent(ev);
         return action;
       }
-      case 'take': snd('battery'); ev = this.setObjectState(id, { taken: true }, cause('battery_taken'));
+      case 'take': snd('battery'); this.stats.batteries++; ev = this.setObjectState(id, { taken: true }, cause('battery_taken'));
         if (st.torch.charge < 0.3) { st.torch.charge = 1; this.out.notices.push({ key: 'notice.batterySwapped' }); } else { st.torch.spares++; this.out.notices.push({ key: 'notice.batteryTaken' }); }
         this.flags.delete('torch_low');
         break;
@@ -661,11 +766,13 @@ export class GameSession implements SimHost {
   photoSubjects(): { subjects: string[]; hiddenActorIds: string[] } {
     const subjects = new Set<string>();
     const hidden: string[] = [];
+    const arch = new Set<string>();
     for (const a of this.state.actors) {
       if (!a.present || !a.visible) continue;
       const d = this.playerDistance(a.pos);
       if (d > 120 || this.angleTo(a.pos) > 0.62 || !this.lineOfSight(a.pos)) continue;
       if (!a.photographable) { hidden.push(a.id); continue; }
+      arch.add(a.archetype);
       subjects.add(a.archetype === 'light' ? 'light' : a.kind === 'npc' ? 'person' : a.kind === 'fauna' ? 'animal' : 'figure');
     }
     for (const o of this.byId.values()) {
@@ -674,6 +781,7 @@ export class GameSession implements SimHost {
       if (this.model.indoorsAt(pose.x, pose.z) && !this.state.player.indoors) continue; // dietro una parete
       if (this.playerDistance(pose) < 16 && this.angleTo(pose) < 0.6) subjects.add(o.kind);
     }
+    this.photoArchetypes = [...arch];
     return { subjects: [...subjects], hiddenActorIds: hidden };
   }
 
@@ -681,7 +789,7 @@ export class GameSession implements SimHost {
     const st = this.state;
     if (st.photos.length >= MAX_PHOTOS) { this.out.notices.push({ key: 'notice.photoFull' }); return null; }
     const id = (st.photos[st.photos.length - 1]?.id ?? 0) + 1;
-    const photo: Photo = { id, t: st.time, dataUrl, bytes: Math.round(dataUrl.length * 0.75), pos: { ...st.player.pos }, yaw: st.player.yaw, poiId: this.model.poiAt(st.player.pos)?.id, subjects };
+    const photo: Photo = { id, t: st.time, dataUrl, bytes: Math.round(dataUrl.length * 0.75), pos: { ...st.player.pos }, yaw: st.player.yaw, poiId: this.model.poiAt(st.player.pos)?.id, subjects, archetypes: this.photoArchetypes };
     st.photos.push(photo);
     this.out.sounds.push({ kind: 'camera' });
     this.out.notices.push({ key: 'notice.photoSaved' });
@@ -760,7 +868,7 @@ export class GameSession implements SimHost {
     const base = 2 + Math.round(hash2(Math.round(st.player.pos.x / 120), Math.round(st.player.pos.z / 120), this.spec.seed) * 2);
     const map = this.mapView();
     return {
-      clock: clockString(this.cachedSky.hour), signal: clamp(Math.round(base * (1 - inter.phone)), 0, 4), torchCharge: st.torch.charge, torchSpares: st.torch.spares,
+      clock: clockString(this.cachedSky.hour), signal: clamp(Math.round(base * (1 - inter.phone)), 0, 4), torchCharge: st.torch.charge, torchSpares: st.torch.spares, phoneBattery: st.body.phone,
       messages: st.messages, photos: st.photos, maxPhotos: MAX_PHOTOS, reports: st.reports, map, allReported: this.allReported(),
       missions: st.missions.map((m, i) => ({ id: m.id, n: i + 1, title: m.text[lang], place: this.model.poi(m.poiId)?.name[lang] ?? '', state: m.state, canReport: m.state === 'inspected' })),
     };
@@ -775,6 +883,7 @@ export class GameSession implements SimHost {
       outcome: st.death ? 'killed' : 'completed',
       missionsCompleted: st.missions.filter((m) => m.state === 'reported').length,
       reports: st.reports.map((r) => ({ title: st.missions.find((m) => m.id === r.missionId)!.text[st.lang], text: r.text })), shareUrl: `${sep.split('#')[0]}?seed=${st.seed}`,
+      story: storyOf(st.mysteries, st.lang, (id) => this.model.poi(id)?.name[st.lang] ?? ''),
       chronicle: log, chronicleText: chronicleText(log, `The Dark Seed — seed ${st.seed} — ${this.spec.officer.first} ${this.spec.officer.last}`, st.lang),
     };
   }
@@ -810,4 +919,22 @@ export class GameSession implements SimHost {
   }
 
   missionDef(m: Mission) { return MISSION_TYPES[m.type]; }
+
+  /** Riassunto del turno per gli obiettivi. */
+  shiftRecord(): ShiftRecord {
+    const st = this.state;
+    const photographed = [...new Set(st.photos.flatMap((p) => p.archetypes ?? []))];
+    const subjects = [...new Set(st.photos.flatMap((p) => p.subjects))];
+    const events = [...new Set(st.log.map((e) => e.type))];
+    const clues = st.mysteries.reduce((n, m) => n + m.clues.length, 0), found = st.mysteries.reduce((n, m) => n + m.discovered.length, 0);
+    return {
+      seed: st.seed, completed: st.ended && !st.death && !st.abandoned, death: st.death?.kind, durationSeconds: Math.round(st.endedAt ?? st.time),
+      missions: st.missions.length, missionsReported: st.missions.filter((m) => m.state === 'reported').length,
+      photos: st.photos.length, maxPhotos: MAX_PHOTOS, photographed, subjects, events,
+      torchOnSeconds: this.stats.torchOn, runMeters: this.stats.run, walkMeters: this.stats.walk, batteriesTaken: this.stats.batteries,
+      housesEntered: this.housesEntered.size, churchVisited: this.stats.church, pierWalked: this.stats.pier,
+      dreadBeats: st.log.filter((e) => e.tags.includes('dread')).length, cluesFound: found, cluesTotal: clues,
+      radioCalls: this.radio.calls, radioAnswered: this.radio.answered, coldest: st.body.coldest, breathless: st.body.breathless, phoneDied: st.body.phoneDied,
+    };
+  }
 }

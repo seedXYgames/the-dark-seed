@@ -24,6 +24,7 @@ import { seedMysteries } from './sim/mysteries';
 import { createSimulation } from './sim/simulation';
 import { loadSettings } from './ui/settingsStore';
 import { Ui } from './ui/ui';
+import { loadProgress, recordShift, saveProgress } from './game/achievements';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const root = document.getElementById('ui-root') as HTMLElement;
@@ -178,8 +179,24 @@ function refreshPhone(force = false) {
   if (ui.isPhoneOpen()) ui.updatePhone(view.session.phoneView());
 }
 
+/** Registra il turno nei progressi salvati nel browser e restituisce gli obiettivi nuovi. */
+function unlockAchievements(s: GameSession): string[] {
+  try {
+    const prog = loadProgress();
+    const fresh = recordShift(s.shiftRecord(), prog);
+    saveProgress(prog);
+    return fresh;
+  } catch { return []; }
+}
+
+function phoneDead(): boolean {
+  if (!view || view.session.state.body.phone > 0) return false;
+  ui.notify(t(L(), 'notice.body.phoneOff'));
+  return true;
+}
+
 function openPhone(tab?: PhoneTab) {
-  if (!view || inspect) return;
+  if (!view || inspect || phoneDead()) return;
   unlockPointer();
   ui.openPhone(tab);
   refreshPhone(true);
@@ -235,8 +252,9 @@ window.addEventListener('keydown', (e) => {
     case 'KeyE': doInteract(); break;
     case 'KeyF': if (!inspect) view.session.toggleTorch(); break;
     case 'KeyT': openPhone(); break;
-    case 'KeyM': if (!inspect) { ui.setNavigator(!ui.isNavigatorOn()); lastNav = 0; } break;
-    case 'KeyC': if (!inspect) pendingPhoto = true; break;
+    case 'KeyM': if (!inspect && (ui.isNavigatorOn() || !phoneDead())) { ui.setNavigator(!ui.isNavigatorOn()); lastNav = 0; } break;
+    case 'KeyC': if (!inspect && !phoneDead()) pendingPhoto = true; break;
+    case 'KeyR': if (!view.session.answerRadio()) ui.notify(t(L(), 'notice.radioSilent')); break;
     default: break;
   }
 });
@@ -375,7 +393,14 @@ function gameFrame(v: View, dt: number) {
   }
   const p = st.player;
   v.camera.position.set(p.pos.x, p.y + EYE_HEIGHT, p.pos.z);
-  v.camera.rotation.set(pitch, yaw, 0);
+  // freddo intenso: un tremore leggero dello sguardo
+  const shiver = paused ? 0 : s.body.shiver(), tt = performance.now() / 1000;
+  const shY = shiver * 0.006 * (Math.sin(tt * 37) + 0.6 * Math.sin(tt * 53 + 1.3)), shP = shiver * 0.005 * (Math.sin(tt * 41 + 0.7) + 0.5 * Math.sin(tt * 61));
+  v.camera.rotation.set(pitch + shP, yaw + shY, 0);
+  s.setPhoneUse(!phoneOpen ? 'off' : ui.phoneViewfinder() ? 'camera' : 'open');
+  if (phoneOpen && st.body.phone <= 0) { ui.closePhone(); ui.notify(t(L(), 'notice.body.phoneOff')); }
+  if (ui.isNavigatorOn() && st.body.phone <= 0) ui.setNavigator(false);
+  if (frame % 4 === 0) ui.setBody(st.body.stamina, st.body.exhausted, st.body.warmth, s.radio.pending() && !st.ended);
   const wantFov = zooming && !paused && !phoneOpen && !inspect ? ZOOM_FOV : BASE_FOV;
   v.camera.fov += (wantFov - v.camera.fov) * Math.min(1, dt * 9);
   if (inspect) { inspect.mesh.rotation.set(inspect.ry, inspect.rx, 0); inspect.mesh.position.z += (inspect.dist - inspect.mesh.position.z) * 0.2; }
@@ -428,7 +453,7 @@ function gameFrame(v: View, dt: number) {
     const walking = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((k) => keys.has(k));
     const running = walking && (keys.has('ShiftLeft') || keys.has('ShiftRight')) && !paused && !inspect;
     const step = Math.min(0.5, dt * 6);
-    exert = clamp(exert + (running ? step / 9 : -step / 14), 0, 1);
+    exert = Math.max(clamp(exert + (running ? step / 9 : -step / 14), 0, 1), st.body.exhausted ? 1 : (1 - st.body.stamina) * 0.8);
     let quiet = 0;
     for (const hs of ctx.hushSources) if (Math.hypot(hs.pos.x - p.pos.x, hs.pos.z - p.pos.z) < hs.radius) quiet = Math.max(quiet, hs.strength);
     const fear = Math.max(mood.watched ? 0.8 : 0, mood.intensity * 0.7, quiet);
@@ -466,7 +491,9 @@ function gameFrame(v: View, dt: number) {
     ui.closePhone();
     ui.setPrompt(null); ui.setSubtitle(null); ui.setScreenEffect('none', 0);
     tts.cancel();
-    ui.showSummary(s.summary(location.href));
+    const sum = s.summary(location.href);
+    sum.achievements = unlockAchievements(s);
+    ui.showSummary(sum);
   }
 }
 

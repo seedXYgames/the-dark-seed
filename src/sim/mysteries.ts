@@ -59,7 +59,18 @@ function insideBuilding(spec: WorldSpec, x: number, z: number, margin: number): 
   return false;
 }
 
-function freeSpot(spec: WorldSpec, poi: Poi, rng: Rng): { x: number; z: number } | null {
+function freeSpot(spec: WorldSpec, poi: Poi, rng: Rng): { x: number; z: number; buildingId?: string } | null {
+  // nei paesi un indizio sta spesso dentro una casa lasciata aperta: vale la pena entrare
+  const houses = spec.buildings.filter((b) => b.poiId === poi.id && b.enterable && b.kind === 'house');
+  if (houses.length && rng.chance(0.65)) {
+    const b = rng.pick(houses), c = Math.cos(b.rotY), sn = Math.sin(b.rotY);
+    for (let i = 0; i < 12; i++) {
+      const lx = rng.range(-b.w / 2 + 1, b.w / 2 - 1), lz = rng.range(-b.d / 2 + 1, b.d / 2 - 1.4);
+      const x = b.pos.x + lx * c + lz * sn, z = b.pos.z - lx * sn + lz * c;
+      if (spec.objects.some((o) => Math.hypot(o.pos.x - x, o.pos.z - z) < 1.0)) continue;
+      return { x, z, buildingId: b.id };
+    }
+  }
   for (let i = 0; i < 24; i++) {
     const a = rng.range(0, Math.PI * 2), r = poi.radius * rng.range(0.3, 0.62);
     const x = poi.pos.x + Math.sin(a) * r, z = poi.pos.z + Math.cos(a) * r;
@@ -94,7 +105,8 @@ export function seedMysteries(spec: WorldSpec): void {
       if (!spot) return;
       const asItem = order === 0 || rng.chance(0.55);
       const index = mystery.clues.length;
-      const base: Pick<WorldObjectSpec, 'poiId' | 'pos' | 'y' | 'rotY'> = { poiId: poi.id, pos: spot, y: Number.NaN, rotY: rng.range(0, Math.PI * 2) };
+      const base: Pick<WorldObjectSpec, 'poiId' | 'pos' | 'y' | 'rotY' | 'buildingId'> = { poiId: poi.id, pos: { x: spot.x, z: spot.z }, y: Number.NaN, rotY: rng.range(0, Math.PI * 2) };
+      if (spot.buildingId) base.buildingId = spot.buildingId;
       let obj: WorldObjectSpec;
       if (asItem) {
         let kind = rng.pick(theme.items);

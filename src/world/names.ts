@@ -37,6 +37,8 @@ const TYPE_NOUN: Record<PoiType, [string, string][]> = {
   restroom: [['Servizi', 'Restrooms'], ['Blocco servizi', 'Comfort Station']],
   roadside: [['Slargo', 'Turnout'], ['Piazzola', 'Lay-by']],
   clearing: [['Radura', 'Clearing'], ['Prato', 'Meadow']],
+  sawmill: [['Segheria', 'Sawmill'], ['Vecchia segheria', 'Old Mill']],
+  weather_station: [['Stazione meteo', 'Weather Station'], ['Capannina meteo', 'Weather Post']],
 };
 
 export function poiName(type: PoiType, rng: Rng, used: Set<string>): L10n {

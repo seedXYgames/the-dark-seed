@@ -64,6 +64,8 @@ export class Phone {
   private readonly signalEl: HTMLElement;
   private readonly torchEl: HTMLElement;
   private readonly torchPct: HTMLElement;
+  private readonly phoneBatt: HTMLElement;
+  private readonly phoneBattFill: HTMLElement;
   private readonly msgBadge: HTMLElement;
   private statusSig = '';
 
@@ -109,7 +111,13 @@ export class Phone {
     this.torchEl.appendChild(icon('torch'));
     this.torchPct = el('span', 'tds-status-pct', '');
     this.torchEl.appendChild(this.torchPct);
-    right.append(this.signalEl, this.torchEl);
+    this.phoneBatt = el('span', 'tds-status-phone');
+    this.phoneBatt.setAttribute('role', 'img');
+    const pb = el('span', 'tds-batt');
+    this.phoneBattFill = el('i', 'tds-batt-fill');
+    pb.appendChild(this.phoneBattFill);
+    this.phoneBatt.appendChild(pb);
+    right.append(this.signalEl, this.torchEl, this.phoneBatt);
     status.append(this.clockEl, right);
 
     const content = el('div', 'tds-phone-content');
@@ -227,13 +235,17 @@ export class Phone {
     const signal = v ? effectiveSignal(v.signal, v.map.glitch) : 0;
     const pct = v ? Math.round(Math.min(1, Math.max(0, v.torchCharge)) * 100) : 0;
     const unread = v ? v.messages.reduce((n, m) => n + (m.read ? 0 : 1), 0) : 0;
-    const sig = `${lang}|${clock}|${signal}|${pct}|${unread}`;
+    const ph = v ? Math.round(Math.min(1, Math.max(0, v.phoneBattery ?? 1)) * 100) : 100;
+    const sig = `${lang}|${clock}|${signal}|${pct}|${unread}|${ph}`;
     if (sig === this.statusSig) return;
     this.statusSig = sig;
     this.clockEl.textContent = clock;
     this.signalEl.dataset.level = String(signal);
     this.signalEl.setAttribute('aria-label', t(lang, 'phone.status.signal', { n: signal }));
     this.torchPct.textContent = `${pct}%`;
+    this.phoneBattFill.style.width = `${ph}%`;
+    this.phoneBatt.classList.toggle('is-low', ph < 15);
+    this.phoneBatt.setAttribute('aria-label', t(lang, 'phone.status.phone', { n: ph }));
     this.torchEl.classList.toggle('is-low', pct < 20);
     this.torchEl.setAttribute('aria-label', t(lang, 'phone.status.torch', { n: pct }));
     this.msgBadge.hidden = unread === 0;

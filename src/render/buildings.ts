@@ -238,6 +238,17 @@ export function buildBuilding(c: Ctx, b: BuildingSpec, parent: TransformNode): B
       g.box(-0.9, 1.35, hd + 0.004, 2.0, 2.7, 0.01, DARK);
       g.box(-0.9, 2.85, hd + 0.02, 2.4, 0.18, 0.06, trim).box(-2.05, 1.4, hd + 0.02, 0.18, 2.8, 0.06, trim).box(0.25, 1.4, hd + 0.02, 0.18, 2.8, 0.06, trim);
       g.box(-0.9, -0.1, hd + 0.6, 3.2, 0.2, 1.2, STONE).box(-0.9, -0.25, hd + 1.4, 3.6, 0.2, 0.6, STONE);
+      // cimitero dietro la chiesa: lapidi storte, qualche croce
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 4; k++) {
+        const hsh = Math.sin((b.palette + 3) * 91.7 + r * 12.9 + k * 4.1) * 43758.5, f = hsh - Math.floor(hsh);
+        if (f < 0.18) continue;
+        const gx = -3.6 + k * 2.4 + (f - 0.5) * 0.4, gz = -hd - 3 - r * 2.5;
+        g.push().tr(gx, 0, gz).ry((f - 0.5) * 0.3);
+        if (f > 0.75) g.box(0, 0.55, 0, 0.08, 1.1, 0.08, 0x8a8478).box(0, 0.78, 0, 0.5, 0.08, 0.08, 0x8a8478);
+        else g.box(0, 0.38, 0, 0.55, 0.76, 0.12, mixHex(STONE, 0x3a3a34, f * 0.5)).box(0, 0.78, 0, 0.45, 0.08, 0.12, mixHex(STONE, 0x3a3a34, f * 0.5));
+        g.box(0, -0.02, 0.6, 0.6, 0.06, 1.1, mixHex(STONE, 0x2c2a24, 0.5));
+        g.pop();
+      }
       break;
     }
     case 'barn': {
@@ -253,6 +264,46 @@ export function buildBuilding(c: Ctx, b: BuildingSpec, parent: TransformNode): B
       g.beam([1.6, 0.05, hd + 0.05], [-1.6, 2.95, hd + 0.05], 0.1, mixHex(dk, 0xffffff, 0.2), 0.02);
       g.box(0, 3.3, hd + 0.1, 3.6, 0.1, 0.2, STEEL);
       windowAt(g, gw, 0, h + rise * 0.3, hd + 0.006, 0, 0.9, 0.7, dk);
+      break;
+    }
+    case 'mill': {
+      // segheria: capannone di assi, tetto in lamiera, portone, nastro della sega sotto una tettoia laterale
+      const wood = mixHex(0x5b4a38, PAL_WALL[p], 0.3), dk = mixHex(wood, 0, 0.35), tin = 0x6a6e6a;
+      g.box(0, h / 2 - 0.1, 0, w, h + 0.2, d, wood, 1);
+      for (let x = -hw + 0.25; x < hw; x += 0.5) for (const sz of [-1, 1]) g.box(x, h / 2, sz * (hd + 0.012), 0.04, h, 0.02, dk);
+      g.push().ry(Math.PI / 2);
+      g.beam([0, h + 1.6, 0], [0, h - 0.05, hw + 0.6], d + 0.8, tin, 0.06);
+      g.beam([0, h + 1.6, 0], [0, h - 0.05, -hw - 0.6], d + 0.8, mixHex(tin, 0x7a4a30, 0.35), 0.06);
+      g.pop();
+      g.tri([-hw, h, hd], [hw, h, hd], [0, h + 1.6, hd], wood, [0, 0, 1]).tri([-hw, h, -hd], [hw, h, -hd], [0, h + 1.6, -hd], wood, [0, 0, -1]);
+      g.box(-2, 1.7, hd + 0.03, 3.6, 3.4, 0.04, dk).box(-2, 3.5, hd + 0.08, 4.2, 0.12, 0.12, STEEL);
+      windowAt(g, gw, 3.2, 2.4, hd + 0.006, 0, 1.4, 0.8, dk);
+      for (const sx of [-1, 1]) windowAt(g, gw, sx * (hw + 0.006), 2.6, 0, sx * Math.PI / 2, 1.2, 0.6, dk);
+      // tettoia e banco della sega lungo il lato +x
+      for (const z of [-hd + 0.4, 0, hd - 0.4]) g.box(hw + 3.2, 1.3, z, 0.18, 2.6, 0.18, dk);
+      g.beam([hw, 3.4, 0], [hw + 3.5, 2.6, 0], d + 0.4, tin, 0.05);
+      g.box(hw + 1.8, 0.8, 0, 1.0, 0.12, d - 1.6, PLANK).box(hw + 1.8, 0.4, -hd + 1.2, 0.9, 0.8, 0.12, dk).box(hw + 1.8, 0.4, hd - 1.2, 0.9, 0.8, 0.12, dk);
+      g.cyl(hw + 1.8, 0.95, 0.6, 0.55, 0.55, 0.03, 0x9a9a92, 'x', 16);
+      g.cyl(hw + 1.8, 1.0, -1.6, 0.28, 0.28, 2.6, 0x7a6448, 'z', 8); // tronco sul banco
+      g.cyl(-hw * 0.6, h + 1.2, -hd * 0.4, 0.14, 0.14, 2.2, STEEL, 'y', 8); // tubo della stufa
+      break;
+    }
+    case 'mast': {
+      // stazione meteo: palo con anemometro e banderuola, pannello solare, capannina bianca
+      g.box(0, -0.15, 0, 1.0, 0.3, 1.0, CONCRETE);
+      g.cyl(0, h / 2, 0, 0.07, 0.05, h, 0x9aa0a4, 'y', 8);
+      for (let i = 0; i < 3; i++) {
+        const a = (i * Math.PI * 2) / 3, x = Math.sin(a) * 0.32, z = Math.cos(a) * 0.32;
+        g.beam([0, h + 0.05, 0], [x, h + 0.05, z], 0.025, 0x9aa0a4);
+        g.cyl(x, h + 0.05, z, 0.06, 0.04, 0.07, 0xd8d8d0, 'y', 8);
+      }
+      g.box(0, h + 0.3, 0, 0.03, 0.4, 0.03, 0x9aa0a4).box(0, h + 0.5, 0.15, 0.02, 0.18, 0.45, 0xb8443a);
+      g.push().tr(0, h * 0.55, -0.1).ry(Math.PI);
+      g.beam([0, 0, 0], [0, 0.35, 0.55], 0.9, 0x22303c, 0.03);
+      g.pop();
+      g.box(0, 1.4, 0.7, 0.55, 0.6, 0.45, 0xe6e4dc).box(0, 1.73, 0.7, 0.65, 0.05, 0.55, 0xd0cec4).box(0, 0.6, 0.7, 0.06, 1.2, 0.06, 0x9aa0a4);
+      for (let y = 1.2; y < 1.66; y += 0.09) g.box(0, y, 0.93, 0.5, 0.02, 0.01, 0xb8b6ae);
+      g.box(0, 2.1, 0.08, 0.04, 0.04, 0.04, 0xd84a3a); // spia
       break;
     }
     case 'tower': {

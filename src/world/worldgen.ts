@@ -15,7 +15,7 @@ import {
 
 const RADIUS: Record<PoiType, number> = {
   car_park: 22, cabin: 20, campsite: 22, picnic: 18, town: 72, gas_station: 24, bridge: 8,
-  lake_dock: 14, lookout: 13, utility: 14, restroom: 11, roadside: 10, clearing: 16,
+  lake_dock: 14, lookout: 13, utility: 14, restroom: 11, roadside: 10, clearing: 16, sawmill: 24, weather_station: 12,
 };
 
 interface Ctx {
@@ -290,6 +290,9 @@ function tryGenerate(seed: number, attempt: number, simple: boolean): { spec: Wo
     placePoi(c, 'restroom', fr('restroom'), { near: fr('restroomA').pick(anchors).pos, nearMin: 60, nearMax: 130, gap: 24 });
   }
   if (poiRng.chance(0.62)) placePoi(c, 'roadside', fr('roadside'), { near: carPos, nearMin: 140, nearMax: 460, gap: 50 });
+  // luoghi di lavoro abbandonati o automatici
+  if (poiRng.chance(0.42)) placePoi(c, 'sawmill', fr('sawmill'), { tries: 60, score: (p) => forestField(terrain, p.x, p.z) - h0(c, p.x, p.z) * 0.005 });
+  if (poiRng.chance(0.42)) placePoi(c, 'weather_station', fr('weather'), { tries: 50, score: (p) => h0(c, p.x, p.z) });
   const nClear = poiRng.int(1, 2);
   for (let i = 0; i < nClear; i++) placePoi(c, 'clearing', fr('clearing' + i), { score: (p) => -forestField(terrain, p.x, p.z) + h0(c, p.x, p.z) * 0.01 });
   // porticcioli: uno o due sul lago, uno sul fiume
