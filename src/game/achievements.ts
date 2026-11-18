@@ -132,7 +132,12 @@ export function favouriteSeed(p: Progress): number | null {
 }
 
 export function saveProgress(p: Progress, storage: Pick<Storage, 'setItem'> | null = safeStorage()): void {
-  try { storage?.setItem(KEY, JSON.stringify(p)); } catch { /* memoria del browser non disponibile */ }
+  try {
+    storage?.setItem(KEY, JSON.stringify(p));
+    if (typeof window !== 'undefined' && (window as any).SeedXY?.syncLocalProgress) {
+      (window as any).SeedXY.syncLocalProgress().catch(() => {});
+    }
+  } catch { /* memoria del browser non disponibile */ }
 }
 
 function safeStorage(): Storage | null {
